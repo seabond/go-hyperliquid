@@ -109,6 +109,14 @@ func (mv *MixedValue) String() (string, bool) {
 	return s, true
 }
 
+func (mv *MixedValue) MustString() string {
+	var s string
+	if err := json.Unmarshal(*mv, &s); err != nil {
+		panic(err)
+	}
+	return s
+}
+
 func (mv *MixedValue) Object() (map[string]any, bool) {
 	var obj map[string]any
 	if err := json.Unmarshal(*mv, &obj); err != nil {

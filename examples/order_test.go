@@ -47,7 +47,7 @@ func TestOrder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, err := exchange.Order(context.TODO(), tt.req, nil)
+			resp, err := exchange.Order(context.TODO(), hyperliquid.GroupingNA, tt.req, nil)
 			if err != nil {
 				t.Fatalf("Order failed: %v", err)
 			}
@@ -175,7 +175,7 @@ func Test_create_order_cancel(t *testing.T) {
 		ClientOrderID: &cloid,
 	}
 
-	result, err := exchange.Order(context.TODO(), orderReq, nil)
+	result, err := exchange.Order(context.TODO(), hyperliquid.GroupingNA, orderReq, nil)
 	if err != nil {
 		if hyperliquid.IsWalletDoesNotExistError(err) {
 			t.Skip("wallet not registered on testnet")
@@ -218,7 +218,7 @@ func TestSLOrder(t *testing.T) {
 		ClientOrderID: func() *string { s := "0x06c60000000000000000000000003f5a"; return &s }(),
 	}
 
-	result, err := exchange.Order(context.TODO(), tpOrderReq, nil)
+	result, err := exchange.Order(context.TODO(), hyperliquid.GroupingNA, tpOrderReq, nil)
 	if err != nil {
 		// If wallet doesn't exist on Hyperliquid, skip the test
 		// This is expected for test credentials that haven't been funded/registered

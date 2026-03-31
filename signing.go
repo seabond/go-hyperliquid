@@ -414,12 +414,13 @@ type SignatureResult struct {
 type L1ActionSigner interface {
 	SignL1Action(
 		ctx context.Context,
+		account Account,
 		action any,
 		vaultAddress string,
 		timestamp int64,
 		expiresAfter *int64,
 		isMainnet bool,
-	) (SignatureResult, error)
+	) (*SignatureResult, error)
 }
 
 // UserSignedActionSigner signs direct EIP-712 user-signed actions.
@@ -427,11 +428,12 @@ type L1ActionSigner interface {
 type UserSignedActionSigner interface {
 	SignUserSignedAction(
 		ctx context.Context,
+		account Account,
 		action map[string]any,
 		payloadTypes []apitypes.Type,
 		primaryType string,
 		isMainnet bool,
-	) (SignatureResult, error)
+	) (*SignatureResult, error)
 }
 
 // AgentSigner signs agent approval actions.
@@ -439,61 +441,11 @@ type UserSignedActionSigner interface {
 type AgentSigner interface {
 	SignAgent(
 		ctx context.Context,
+		account Account,
 		agentAddress, agentName string,
 		nonce int64,
 		isMainnet bool,
-	) (SignatureResult, error)
-}
-
-// ECDSAL1Signer implements L1ActionSigner using an ECDSA private key.
-func ECDSAL1Signer(pk *ecdsa.PrivateKey) L1ActionSigner {
-	return &ecdsaL1Signer{pk: pk}
-}
-
-type ecdsaL1Signer struct{ pk *ecdsa.PrivateKey }
-
-func (s *ecdsaL1Signer) SignL1Action(
-	_ context.Context,
-	action any,
-	vaultAddress string,
-	timestamp int64,
-	expiresAfter *int64,
-	isMainnet bool,
-) (SignatureResult, error) {
-	return SignL1Action(s.pk, action, vaultAddress, timestamp, expiresAfter, isMainnet)
-}
-
-// ECDSAUserSignedSigner implements UserSignedActionSigner using an ECDSA private key.
-func ECDSAUserSignedSigner(pk *ecdsa.PrivateKey) UserSignedActionSigner {
-	return &ecdsaUserSignedSigner{pk: pk}
-}
-
-type ecdsaUserSignedSigner struct{ pk *ecdsa.PrivateKey }
-
-func (s *ecdsaUserSignedSigner) SignUserSignedAction(
-	_ context.Context,
-	action map[string]any,
-	payloadTypes []apitypes.Type,
-	primaryType string,
-	isMainnet bool,
-) (SignatureResult, error) {
-	return SignUserSignedAction(s.pk, action, payloadTypes, primaryType, isMainnet)
-}
-
-// ECDSAAgentSigner implements AgentSigner using an ECDSA private key.
-func ECDSAAgentSigner(pk *ecdsa.PrivateKey) AgentSigner {
-	return &ecdsaAgentSigner{pk: pk}
-}
-
-type ecdsaAgentSigner struct{ pk *ecdsa.PrivateKey }
-
-func (s *ecdsaAgentSigner) SignAgent(
-	_ context.Context,
-	agentAddress, agentName string,
-	nonce int64,
-	isMainnet bool,
-) (SignatureResult, error) {
-	return SignAgent(s.pk, agentAddress, agentName, nonce, isMainnet)
+	) (*SignatureResult, error)
 }
 
 // hashStructLenient is like HashStruct but ignores fields in message that are not in types
@@ -643,12 +595,13 @@ func signInner(
 // This matches Python SDK behavior where the field order doesn't matter and extra fields (type, signatureChainId)
 // are present in the message but ignored during EIP-712 hashing via hashStructLenient.
 func SignUserSignedAction(
-	privateKey *ecdsa.PrivateKey,
+	ctx context.Context,
+	account Account,
 	action map[string]any,
 	payloadTypes []apitypes.Type,
 	primaryType string,
 	isMainnet bool,
-) (SignatureResult, error) {
+) (*SignatureResult, error) {
 	// Add signatureChainId based on environment
 	// signatureChainId is the chain used by the wallet to sign.
 	// hyperliquidChain determines the environment and prevents replay attacks.
@@ -683,17 +636,18 @@ func SignUserSignedAction(
 
 	// signInner uses hashStructLenient which filters message to only include
 	// fields declared in payloadTypes, matching Python eth_account behavior
-	return signInner(privateKey, typedData)
+	return account.SignTypedData(ctx, typedData)
 }
 
 func SignL1Action(
-	privateKey *ecdsa.PrivateKey,
+	ctx context.Context,
+	account Account,
 	action any,
 	vaultAddress string,
 	timestamp int64,
 	expiresAfter *int64,
 	isMainnet bool,
-) (SignatureResult, error) {
+) (*SignatureResult, error) {
 	// Step 1: Create action hash
 	hash := actionHash(action, vaultAddress, timestamp, expiresAfter)
 	// fmt.Printf("[DEBUG] SignL1Action - ActionHash: %x\n", hash)
@@ -705,7 +659,7 @@ func SignL1Action(
 	typedData := l1Payload(phantomAgent, isMainnet)
 
 	// Step 4: Sign using EIP-712
-	return signInner(privateKey, typedData)
+	return account.SignTypedData(ctx, typedData)
 }
 
 type signUsdClassTransferAction struct {
@@ -716,19 +670,20 @@ type signUsdClassTransferAction struct {
 
 // SignUsdClassTransferAction signs USD class transfer action
 func SignUsdClassTransferAction(
-	privateKey *ecdsa.PrivateKey,
+	ctx context.Context,
+	account Account,
 	amount float64,
 	toPerp bool,
 	timestamp int64,
 	isMainnet bool,
-) (SignatureResult, error) {
+) (*SignatureResult, error) {
 	action := signUsdClassTransferAction{
 		Type:   "usdClassTransfer",
 		Amount: amount,
 		ToPerp: toPerp,
 	}
 
-	return SignL1Action(privateKey, action, "", timestamp, nil, isMainnet)
+	return SignL1Action(ctx, account, action, "", timestamp, nil, isMainnet)
 }
 
 type signSpotTransferAction struct {
@@ -740,12 +695,13 @@ type signSpotTransferAction struct {
 
 // SignSpotTransferAction signs spot transfer action
 func SignSpotTransferAction(
-	privateKey *ecdsa.PrivateKey,
+	ctx context.Context,
+	account Account,
 	amount float64,
 	destination, token string,
 	timestamp int64,
 	isMainnet bool,
-) (SignatureResult, error) {
+) (*SignatureResult, error) {
 	action := signSpotTransferAction{
 		Type:        "spotTransfer",
 		Amount:      amount,
@@ -753,7 +709,7 @@ func SignSpotTransferAction(
 		Token:       token,
 	}
 
-	return SignL1Action(privateKey, action, "", timestamp, nil, isMainnet)
+	return SignL1Action(ctx, account, action, "", timestamp, nil, isMainnet)
 }
 
 type signUsdTransferAction struct {
@@ -764,19 +720,20 @@ type signUsdTransferAction struct {
 
 // SignUsdTransferAction signs USD transfer action
 func SignUsdTransferAction(
-	privateKey *ecdsa.PrivateKey,
+	ctx context.Context,
+	account Account,
 	amount float64,
 	destination string,
 	timestamp int64,
 	isMainnet bool,
-) (SignatureResult, error) {
+) (*SignatureResult, error) {
 	action := signUsdTransferAction{
 		Type:        "usdTransfer",
 		Amount:      amount,
 		Destination: destination,
 	}
 
-	return SignL1Action(privateKey, action, "", timestamp, nil, isMainnet)
+	return SignL1Action(ctx, account, action, "", timestamp, nil, isMainnet)
 }
 
 type signPerpDexClassTransferAction struct {
@@ -789,13 +746,14 @@ type signPerpDexClassTransferAction struct {
 
 // SignPerpDexClassTransferAction signs perp dex class transfer action
 func SignPerpDexClassTransferAction(
-	privateKey *ecdsa.PrivateKey,
+	ctx context.Context,
+	account Account,
 	dex, token string,
 	amount float64,
 	toPerp bool,
 	timestamp int64,
 	isMainnet bool,
-) (SignatureResult, error) {
+) (*SignatureResult, error) {
 	action := signPerpDexClassTransferAction{
 		Type:   "perpDexClassTransfer",
 		Dex:    dex,
@@ -804,7 +762,7 @@ func SignPerpDexClassTransferAction(
 		ToPerp: toPerp,
 	}
 
-	return SignL1Action(privateKey, action, "", timestamp, nil, isMainnet)
+	return SignL1Action(ctx, account, action, "", timestamp, nil, isMainnet)
 }
 
 type signTokenDelegateAction struct {
@@ -816,13 +774,14 @@ type signTokenDelegateAction struct {
 
 // SignTokenDelegateAction signs token delegate action
 func SignTokenDelegateAction(
-	privateKey *ecdsa.PrivateKey,
+	ctx context.Context,
+	account Account,
 	token string,
 	amount float64,
 	validatorAddress string,
 	timestamp int64,
 	isMainnet bool,
-) (SignatureResult, error) {
+) (*SignatureResult, error) {
 	action := signTokenDelegateAction{
 		Type:             "tokenDelegate",
 		Token:            token,
@@ -830,7 +789,7 @@ func SignTokenDelegateAction(
 		ValidatorAddress: validatorAddress,
 	}
 
-	return SignL1Action(privateKey, action, "", timestamp, nil, isMainnet)
+	return SignL1Action(ctx, account, action, "", timestamp, nil, isMainnet)
 }
 
 type signWithdrawFromBridgeAction struct {
@@ -842,12 +801,13 @@ type signWithdrawFromBridgeAction struct {
 
 // SignWithdrawFromBridgeAction signs withdraw from bridge action
 func SignWithdrawFromBridgeAction(
-	privateKey *ecdsa.PrivateKey,
+	ctx context.Context,
+	account Account,
 	destination string,
 	amount, fee float64,
 	timestamp int64,
 	isMainnet bool,
-) (SignatureResult, error) {
+) (*SignatureResult, error) {
 	action := signWithdrawFromBridgeAction{
 		Type:        "withdrawFromBridge",
 		Destination: destination,
@@ -855,19 +815,20 @@ func SignWithdrawFromBridgeAction(
 		Fee:         fee,
 	}
 
-	return SignL1Action(privateKey, action, "", timestamp, nil, isMainnet)
+	return SignL1Action(ctx, account, action, "", timestamp, nil, isMainnet)
 }
 
 // SignAgent signs agent approval action using EIP-712 direct signing
 func SignAgent(
-	privateKey *ecdsa.PrivateKey,
+	ctx context.Context,
+	account Account,
 	agentAddress, agentName string,
 	nonce int64,
 	isMainnet bool,
-) (SignatureResult, error) {
+) (*SignatureResult, error) {
 	// The nonce must be non-negative
 	if nonce < 0 {
-		return SignatureResult{}, fmt.Errorf("nonce cannot be negative: %d", nonce)
+		return nil, fmt.Errorf("nonce cannot be negative: %d", nonce)
 	}
 
 	// Use int64 in the action map - apitypes will handle the conversion to uint64
@@ -890,7 +851,8 @@ func SignAgent(
 	}
 
 	return SignUserSignedAction(
-		privateKey,
+		ctx,
+		account,
 		action,
 		payloadTypes,
 		"HyperliquidTransaction:ApproveAgent",
@@ -908,19 +870,20 @@ type signApproveBuilderFee struct {
 
 // SignApproveBuilderFee signs approve builder fee action
 func SignApproveBuilderFee(
-	privateKey *ecdsa.PrivateKey,
+	ctx context.Context,
+	account Account,
 	builderAddress string,
 	maxFeeRate float64,
 	timestamp int64,
 	isMainnet bool,
-) (SignatureResult, error) {
+) (*SignatureResult, error) {
 	action := signApproveBuilderFee{
 		Type:           "approveBuilderFee",
 		BuilderAddress: builderAddress,
 		MaxFeeRate:     maxFeeRate,
 	}
 
-	return SignL1Action(privateKey, action, "", timestamp, nil, isMainnet)
+	return SignL1Action(ctx, account, action, "", timestamp, nil, isMainnet)
 }
 
 type signConvertToMultiSigUserAction struct {
@@ -931,19 +894,20 @@ type signConvertToMultiSigUserAction struct {
 
 // SignConvertToMultiSigUserAction signs convert to multi-sig user action
 func SignConvertToMultiSigUserAction(
-	privateKey *ecdsa.PrivateKey,
+	ctx context.Context,
+	account Account,
 	signers []string,
 	threshold int,
 	timestamp int64,
 	isMainnet bool,
-) (SignatureResult, error) {
+) (*SignatureResult, error) {
 	action := signConvertToMultiSigUserAction{
 		Type:      "convertToMultiSigUser",
 		Signers:   signers,
 		Threshold: threshold,
 	}
 
-	return SignL1Action(privateKey, action, "", timestamp, nil, isMainnet)
+	return SignL1Action(ctx, account, action, "", timestamp, nil, isMainnet)
 }
 
 type signMultiSigAction struct {
@@ -955,13 +919,14 @@ type signMultiSigAction struct {
 
 // SignMultiSigAction signs multi-signature action
 func SignMultiSigAction(
-	privateKey *ecdsa.PrivateKey,
+	ctx context.Context,
+	account Account,
 	innerAction map[string]any,
 	signers []string,
 	signatures []string,
 	timestamp int64,
 	isMainnet bool,
-) (SignatureResult, error) {
+) (*SignatureResult, error) {
 	action := signMultiSigAction{
 		Type:       "multiSig",
 		Action:     innerAction,
@@ -969,7 +934,7 @@ func SignMultiSigAction(
 		Signatures: signatures,
 	}
 
-	return SignL1Action(privateKey, action, "", timestamp, nil, isMainnet)
+	return SignL1Action(ctx, account, action, "", timestamp, nil, isMainnet)
 }
 
 // FloatToUsdInt converts float to USD integer representation

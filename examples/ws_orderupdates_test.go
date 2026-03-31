@@ -25,7 +25,7 @@ func TestOrderUpdatesWebSocket(t *testing.T) {
 		hyperliquid.OrderUpdatesSubscriptionParams{
 			User: testAddress,
 		},
-		func(orders []hyperliquid.WsOrder, err error) {
+		func(orders []hyperliquid.WsOrderWithUser, err error) {
 			if err != nil {
 				t.Errorf("Error in order updates callback: %v", err)
 				return

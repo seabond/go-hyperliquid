@@ -69,7 +69,7 @@ func TestCancelByCloid(t *testing.T) {
 
 			cloid := tc.cloid
 			if tc.placeFirst {
-				placed, err := tc.exchange.Order(context.TODO(), tc.order, nil)
+				placed, err := tc.exchange.Order(context.TODO(), GroupingNA, tc.order, nil)
 				require.NoError(tt, err)
 				require.NotNil(tt, placed.Resting, "expected resting order so it can be canceled")
 				cloid = placed.Resting.ClientID
@@ -167,7 +167,7 @@ func TestCancel(t *testing.T) {
 
 			oid := tc.oid
 			if tc.placeFirst {
-				placed, err := tc.exchange.Order(context.TODO(), tc.order, nil)
+				placed, err := tc.exchange.Order(context.TODO(), GroupingNA, tc.order, nil)
 				require.NoError(tt, err)
 				require.NotNil(tt, placed.Resting, "expected resting order so it can be canceled")
 				oid = placed.Resting.Oid

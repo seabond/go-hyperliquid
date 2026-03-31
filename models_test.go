@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -119,14 +120,14 @@ func TestPosition_MarshalJSON(t *testing.T) {
 			name: "long_position",
 			pos: Position{
 				Coin:           "BTC",
-				EntryPx:        stringPtr("50000.0"),
+				EntryPx:        decimalPtr("50000.0"),
 				Leverage:       Leverage{Type: "cross", Value: 10},
-				LiquidationPx:  stringPtr("45000.0"),
-				MarginUsed:     "5000.0",
-				PositionValue:  "50000.0",
-				ReturnOnEquity: "0.05",
-				Szi:            "1.0",
-				UnrealizedPnl:  "2500.0",
+				LiquidationPx:  decimalPtr("45000.0"),
+				MarginUsed:     decimal.RequireFromString("5000.0"),
+				PositionValue:  decimal.RequireFromString("50000.0"),
+				ReturnOnEquity: decimal.RequireFromString("0.05"),
+				Szi:            decimal.RequireFromString("1.0"),
+				UnrealizedPnl:  decimal.RequireFromString("2500.0"),
 				CumFunding: &CumFunding{
 					AllTime:     "0.03621",
 					SinceChange: "-0.001129",
@@ -142,11 +143,11 @@ func TestPosition_MarshalJSON(t *testing.T) {
 				EntryPx:        nil,
 				Leverage:       Leverage{Type: "isolated", Value: 5, RawUsd: stringPtr("1000.0")},
 				LiquidationPx:  nil,
-				MarginUsed:     "0.0",
-				PositionValue:  "0.0",
-				ReturnOnEquity: "0.0",
-				Szi:            "0.0",
-				UnrealizedPnl:  "0.0",
+				MarginUsed:     decimal.RequireFromString("0.0"),
+				PositionValue:  decimal.RequireFromString("0.0"),
+				ReturnOnEquity: decimal.RequireFromString("0.0"),
+				Szi:            decimal.RequireFromString("0.0"),
+				UnrealizedPnl:  decimal.RequireFromString("0.0"),
 			},
 			expected: `{"coin":"ETH","entryPx":null,"leverage":{"type":"isolated","value":5,"rawUsd":"1000.0"},"liquidationPx":null,"marginUsed":"0.0","positionValue":"0.0","returnOnEquity":"0.0","szi":"0.0","unrealizedPnl":"0.0"}`,
 		},
@@ -231,29 +232,29 @@ func TestUserState_MarshalJSON(t *testing.T) {
 					{
 						Position: Position{
 							Coin:           "BTC",
-							EntryPx:        stringPtr("50000.0"),
+							EntryPx:        decimalPtr("50000.0"),
 							Leverage:       Leverage{Type: "cross", Value: 10},
-							LiquidationPx:  stringPtr("45000.0"),
-							MarginUsed:     "5000.0",
-							PositionValue:  "50000.0",
-							ReturnOnEquity: "0.05",
-							Szi:            "1.0",
-							UnrealizedPnl:  "2500.0",
+							LiquidationPx:  decimalPtr("45000.0"),
+							MarginUsed:     decimal.RequireFromString("5000.0"),
+							PositionValue:  decimal.RequireFromString("50000.0"),
+							ReturnOnEquity: decimal.RequireFromString("0.05"),
+							Szi:            decimal.RequireFromString("1.0"),
+							UnrealizedPnl:  decimal.RequireFromString("2500.0"),
 						},
 						Type: "oneWay",
 					},
 				},
 				CrossMarginSummary: MarginSummary{
-					AccountValue:    "100000.0",
-					TotalMarginUsed: "5000.0",
-					TotalNtlPos:     "50000.0",
-					TotalRawUsd:     "100000.0",
+					AccountValue:    decimal.RequireFromString("100000.0"),
+					TotalMarginUsed: decimal.RequireFromString("5000.0"),
+					TotalNtlPos:     decimal.RequireFromString("50000.0"),
+					TotalRawUsd:     decimal.RequireFromString("100000.0"),
 				},
 				MarginSummary: MarginSummary{
-					AccountValue:    "100000.0",
-					TotalMarginUsed: "5000.0",
-					TotalNtlPos:     "50000.0",
-					TotalRawUsd:     "100000.0",
+					AccountValue:    decimal.RequireFromString("100000.0"),
+					TotalMarginUsed: decimal.RequireFromString("5000.0"),
+					TotalNtlPos:     decimal.RequireFromString("50000.0"),
+					TotalRawUsd:     decimal.RequireFromString("100000.0"),
 				},
 				Withdrawable: "95000.0",
 			},
@@ -264,16 +265,16 @@ func TestUserState_MarshalJSON(t *testing.T) {
 			state: UserState{
 				AssetPositions: []AssetPosition{},
 				CrossMarginSummary: MarginSummary{
-					AccountValue:    "0.0",
-					TotalMarginUsed: "0.0",
-					TotalNtlPos:     "0.0",
-					TotalRawUsd:     "0.0",
+					AccountValue:    decimal.RequireFromString("0.0"),
+					TotalMarginUsed: decimal.RequireFromString("0.0"),
+					TotalNtlPos:     decimal.RequireFromString("0.0"),
+					TotalRawUsd:     decimal.RequireFromString("0.0"),
 				},
 				MarginSummary: MarginSummary{
-					AccountValue:    "0.0",
-					TotalMarginUsed: "0.0",
-					TotalNtlPos:     "0.0",
-					TotalRawUsd:     "0.0",
+					AccountValue:    decimal.RequireFromString("0.0"),
+					TotalMarginUsed: decimal.RequireFromString("0.0"),
+					TotalNtlPos:     decimal.RequireFromString("0.0"),
+					TotalRawUsd:     decimal.RequireFromString("0.0"),
 				},
 				Withdrawable: "0.0",
 			},
@@ -356,4 +357,9 @@ func TestLevel_UnmarshalJSON_StringToFloat(t *testing.T) {
 	assert.Equal(t, 1, level.N)
 	assert.Equal(t, 50000.123, level.Px)
 	assert.Equal(t, 1.456789, level.Sz)
+}
+
+func decimalPtr(s string) *decimal.Decimal {
+	d := decimal.RequireFromString(s)
+	return &d
 }

@@ -34,9 +34,10 @@ type OrderStatusFilled struct {
 }
 
 type OrderStatus struct {
-	Resting *OrderStatusResting `json:"resting,omitempty"`
-	Filled  *OrderStatusFilled  `json:"filled,omitempty"`
-	Error   *string             `json:"error,omitempty"`
+	Resting           *OrderStatusResting `json:"resting,omitempty"`
+	Filled            *OrderStatusFilled  `json:"filled,omitempty"`
+	Error             *string             `json:"error,omitempty"`
+	WaitingForTrigger bool                `json:"waiting_for_trigger"`
 }
 
 func (s *OrderStatus) String() string {
@@ -46,6 +47,10 @@ func (s *OrderStatus) String() string {
 
 type OrderResponse struct {
 	Statuses []OrderStatus
+}
+
+type OrderResponseMixed struct {
+	Statuses []MixedValue
 }
 
 func newOrderTypeWire(o CreateOrderRequest) OrderWireType {
@@ -78,9 +83,14 @@ func newOrderTypeWire(o CreateOrderRequest) OrderWireType {
 
 func newCreateOrderAction(
 	e *Exchange,
+	grouping Grouping,
 	orders []CreateOrderRequest,
 	info *BuilderInfo,
 ) (OrderAction, error) {
+	if grouping == "" {
+		grouping = GroupingNA
+	}
+	
 	orderRequests := make([]OrderWire, len(orders))
 	for i, order := range orders {
 		priceWire, err := floatToWire(order.Price)
@@ -120,7 +130,7 @@ func newCreateOrderAction(
 	res := OrderAction{
 		Type:     "order",
 		Orders:   orderRequests,
-		Grouping: string(GroupingNA),
+		Grouping: string(grouping),
 		Builder:  info,
 	}
 
@@ -129,10 +139,11 @@ func newCreateOrderAction(
 
 func (e *Exchange) Order(
 	ctx context.Context,
+	grouping Grouping,
 	req CreateOrderRequest,
 	builder *BuilderInfo,
 ) (result OrderStatus, err error) {
-	resp, err := e.BulkOrders(ctx, []CreateOrderRequest{req}, builder)
+	resp, err := e.BulkOrders(ctx, grouping, []CreateOrderRequest{req}, builder)
 	if err != nil {
 		return
 	}
@@ -153,28 +164,48 @@ func (e *Exchange) Order(
 
 func (e *Exchange) BulkOrders(
 	ctx context.Context,
+	grouping Grouping,
 	orders []CreateOrderRequest,
 	builder *BuilderInfo,
 ) (result *APIResponse[OrderResponse], err error) {
-	action, err := newCreateOrderAction(e, orders, builder)
-	if err != nil {
-		return nil, err
-	}
-	err = e.executeAction(ctx, action, &result)
+	action, err := newCreateOrderAction(e, grouping, orders, builder)
 	if err != nil {
 		return nil, err
 	}
 
-	if result != nil {
+	var mixedResult *APIResponse[OrderResponseMixed]
+	err = e.executeAction(ctx, action, &mixedResult)
+	if err != nil {
+		return nil, err
+	}
+
+	statuses := make([]OrderStatus, 0, len(mixedResult.Data.Statuses))
+	if mixedResult != nil {
 		// check if any of the statuses has an error set
-		for _, s := range result.Data.Statuses {
-			if s.Error != nil {
-				return result, fmt.Errorf("%s", *s.Error)
+		for _, s := range mixedResult.Data.Statuses {
+			switch {
+			case s.Type() == "string" && s.MustString() == "waitingForTrigger":
+				statuses = append(statuses, OrderStatus{WaitingForTrigger: true})
+			case s.Type() == "object":
+				var status OrderStatus
+				if err = s.Parse(&status); err != nil {
+					return nil, err
+				}
+				if status.Error != nil {
+					return result, fmt.Errorf("%s", *status.Error)
+				}
+				statuses = append(statuses, status)
 			}
 		}
 	}
 
-	return
+	return &APIResponse[OrderResponse]{
+		Status: mixedResult.Status,
+		Data:   OrderResponse{Statuses: statuses},
+		Type:   mixedResult.Type,
+		Err:    mixedResult.Err,
+		Ok:     mixedResult.Ok,
+	}, nil
 }
 
 // ModifyOrderRequest identifies an order by either exchange-provided Oid or client-provided Cloid.
@@ -358,7 +389,7 @@ func (e *Exchange) MarketOpen(
 		Limit: &LimitOrderType{Tif: TifIoc},
 	}
 
-	return e.Order(ctx, CreateOrderRequest{
+	return e.Order(ctx, GroupingNA, CreateOrderRequest{
 		Coin:          name,
 		IsBuy:         isBuy,
 		Size:          sz,
@@ -414,7 +445,7 @@ func (e *Exchange) MarketClose(
 			Limit: &LimitOrderType{Tif: TifIoc},
 		}
 
-		return e.Order(ctx, CreateOrderRequest{
+		return e.Order(ctx, GroupingNA, CreateOrderRequest{
 			Coin:          coin,
 			IsBuy:         isBuy,
 			Size:          size,

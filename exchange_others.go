@@ -88,7 +88,10 @@ func (e *Exchange) SlippagePrice(
 		}
 	}
 
-	asset := e.info.coinToAsset[name]
+	asset, ok := e.info.coinToAsset[name]
+	if !ok {
+		return 0, fmt.Errorf("coin %q not found in asset map", name)
+	}
 	isSpot := asset >= 10000
 
 	// Calculate slippage
@@ -106,7 +109,10 @@ func (e *Exchange) SlippagePrice(
 	if isSpot {
 		decimals = 8
 	}
-	szDecimals := e.info.assetToDecimal[asset]
+	szDecimals, ok := e.info.assetToDecimal[asset]
+	if !ok {
+		return 0, fmt.Errorf("asset %d not found in decimal map", asset)
+	}
 
 	return roundToDecimals(price, decimals-szDecimals), nil
 }
@@ -166,8 +172,8 @@ func (e *Exchange) Reserve(ctx context.Context, weight int) (*ReserveRequestWeig
 	}
 
 	// Sign the action
-	sig, err := SignL1Action(
-		e.privateKey,
+	sig, err := e.signL1Action(
+		ctx,
 		action,
 		"", // No vault address - reserve must be performed by main wallet
 		nonce,
@@ -1388,8 +1394,8 @@ func (e *Exchange) PerpDeployRegisterAsset2(
 		action.RegisterAsset2.Schema = buildSchemaWire(schema)
 	}
 
-	sig, err := SignL1Action(
-		e.privateKey,
+	sig, err := e.signL1Action(
+		ctx,
 		action,
 		e.vault,
 		nonce,
@@ -1440,8 +1446,8 @@ func (e *Exchange) PerpDeployHaltTrading(
 		},
 	}
 
-	sig, err := SignL1Action(
-		e.privateKey,
+	sig, err := e.signL1Action(
+		ctx,
 		action,
 		e.vault,
 		nonce,

@@ -35,9 +35,9 @@ func newExchange(key, url string) (*Exchange, error) {
 	}
 	accountAddr := crypto.PubkeyToAddress(*pubECDSA).Hex()
 
-	exchange := NewExchange(
+	exchange, err := NewExchange(
 		context.TODO(),
-		privateKey,
+		NewAccount(privateKey),
 		url,
 		nil, // Meta will be fetched automatically
 		"",
@@ -45,6 +45,9 @@ func newExchange(key, url string) (*Exchange, error) {
 		nil, // SpotMeta will be fetched automatically
 		nil, // PerpDexs will be fetched automatically
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	return exchange, nil
 }
@@ -287,7 +290,7 @@ func TestOrders(t *testing.T) {
 			initRecorder(tt, tc.record, tc.cassetteName)
 
 			tt.Logf("Test exchange wallet: %s", tc.exchange.accountAddr)
-			res, err := tc.exchange.Order(context.TODO(), tc.order, nil)
+			res, err := tc.exchange.Order(context.TODO(), GroupingNA, tc.order, nil)
 			tt.Logf("res: %v", res)
 			tt.Logf("err: %v", err)
 			if tc.wantErr != "" {

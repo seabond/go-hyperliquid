@@ -26,7 +26,7 @@ func TestCancelOrder(t *testing.T) {
 		},
 	}
 
-	resp, err := exchange.Order(context.TODO(), orderReq, nil)
+	resp, err := exchange.Order(context.TODO(), hyperliquid.GroupingNA, orderReq, nil)
 	if err != nil {
 		t.Fatalf("Failed to place order: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestCancelByCloid(t *testing.T) {
 		ClientOrderID: &cloid,
 	}
 
-	_, err := exchange.Order(context.TODO(), orderReq, nil)
+	_, err := exchange.Order(context.TODO(), hyperliquid.GroupingNA, orderReq, nil)
 	if err != nil {
 		t.Fatalf("Failed to place order: %v", err)
 	}

@@ -2,7 +2,6 @@ package hyperliquid
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"encoding/json"
 	"sync/atomic"
 	"time"
@@ -13,7 +12,7 @@ import (
 type Exchange struct {
 	debug        bool
 	client       *client
-	privateKey   *ecdsa.PrivateKey
+	account      Account
 	vault        string
 	accountAddr  string
 	dex          string
@@ -31,16 +30,16 @@ type Exchange struct {
 
 func NewExchange(
 	ctx context.Context,
-	privateKey *ecdsa.PrivateKey,
+	account Account,
 	baseURL string,
 	meta *Meta,
 	vaultAddr, accountAddr string,
 	spotMeta *SpotMeta,
 	perpDexs *MixedArray,
 	opts ...ExchangeOpt,
-) *Exchange {
+) (*Exchange, error) {
 	ex := &Exchange{
-		privateKey:  privateKey,
+		account:     account,
 		vault:       vaultAddr,
 		accountAddr: accountAddr,
 	}
@@ -55,7 +54,39 @@ func NewExchange(
 	}
 
 	ex.client = newClient(baseURL, ex.clientOpts...)
-	ex.info = NewInfo(ctx, baseURL, true, meta, spotMeta, perpDexs, ex.infoOpts...)
+	var err error
+	ex.info, err = NewInfo(ctx, baseURL, true, meta, spotMeta, perpDexs, ex.infoOpts...)
+	if err != nil {
+		return nil, err
+	}
+
+	return ex, nil
+}
+
+func NewExchangeWithInfo(
+	ctx context.Context,
+	account Account,
+	baseURL string,
+	vaultAddr, accountAddr string,
+	info *Info,
+	opts ...ExchangeOpt,
+) *Exchange {
+	ex := &Exchange{
+		account:     account,
+		vault:       vaultAddr,
+		accountAddr: accountAddr,
+		info:        info,
+	}
+
+	for _, opt := range opts {
+		opt.Apply(ex)
+	}
+
+	if ex.debug {
+		ex.clientOpts = append(ex.clientOpts, clientOptDebugMode())
+	}
+
+	ex.client = newClient(baseURL, ex.clientOpts...)
 
 	return ex
 }
@@ -109,11 +140,11 @@ func (e *Exchange) signL1Action(
 	ts int64,
 	exp *int64,
 	mainnet bool,
-) (SignatureResult, error) {
+) (*SignatureResult, error) {
 	if e.l1Signer != nil {
-		return e.l1Signer.SignL1Action(ctx, action, vault, ts, exp, mainnet)
+		return e.l1Signer.SignL1Action(ctx, e.account, action, vault, ts, exp, mainnet)
 	}
-	return SignL1Action(e.privateKey, action, vault, ts, exp, mainnet)
+	return SignL1Action(ctx, e.account, action, vault, ts, exp, mainnet)
 }
 
 func (e *Exchange) signUserSignedAction(
@@ -122,17 +153,18 @@ func (e *Exchange) signUserSignedAction(
 	payloadTypes []apitypes.Type,
 	primaryType string,
 	mainnet bool,
-) (SignatureResult, error) {
+) (*SignatureResult, error) {
 	if e.userSignedSigner != nil {
 		return e.userSignedSigner.SignUserSignedAction(
 			ctx,
+			e.account,
 			action,
 			payloadTypes,
 			primaryType,
 			mainnet,
 		)
 	}
-	return SignUserSignedAction(e.privateKey, action, payloadTypes, primaryType, mainnet)
+	return SignUserSignedAction(ctx, e.account, action, payloadTypes, primaryType, mainnet)
 }
 
 func (e *Exchange) signAgent(
@@ -140,11 +172,11 @@ func (e *Exchange) signAgent(
 	agentAddress, agentName string,
 	nonce int64,
 	mainnet bool,
-) (SignatureResult, error) {
+) (*SignatureResult, error) {
 	if e.agentSigner != nil {
-		return e.agentSigner.SignAgent(ctx, agentAddress, agentName, nonce, mainnet)
+		return e.agentSigner.SignAgent(ctx, e.account, agentAddress, agentName, nonce, mainnet)
 	}
-	return SignAgent(e.privateKey, agentAddress, agentName, nonce, mainnet)
+	return SignAgent(ctx, e.account, agentAddress, agentName, nonce, mainnet)
 }
 
 // executeAction executes an action and unmarshals the response into the given result
@@ -178,7 +210,7 @@ func (e *Exchange) executeAction(ctx context.Context, action, result any) error 
 func (e *Exchange) postAction(
 	ctx context.Context,
 	action any,
-	signature SignatureResult,
+	signature *SignatureResult,
 	nonce int64,
 ) ([]byte, error) {
 	payload := map[string]any{
@@ -209,11 +241,11 @@ func (e *Exchange) postAction(
 
 	// Debug logging
 	if e.debug { //nolint:staticcheck // Empty branch for future debugging
-		// if jsonPayload, err := json.MarshalIndent(payload, "", "  "); err == nil {
-		// 	println("=== OUTGOING EXCHANGE PAYLOAD ===")
-		// 	println(string(jsonPayload))
-		// 	println("=================================")
-		// }
+		if jsonPayload, err := json.MarshalIndent(payload, "", "  "); err == nil {
+			println("=== OUTGOING EXCHANGE PAYLOAD ===")
+			println(string(jsonPayload))
+			println("=================================")
+		}
 	}
 
 	return e.client.post(ctx, "/exchange", payload)

@@ -22,7 +22,7 @@ func newTestInfo(t *testing.T) *hyperliquid.Info {
 	t.Logf("API URL: %s", apiURL)
 
 	// Initialize test info
-	return hyperliquid.NewInfo(
+	info, err := hyperliquid.NewInfo(
 		context.TODO(),
 		apiURL,
 		true,
@@ -31,6 +31,10 @@ func newTestInfo(t *testing.T) *hyperliquid.Info {
 		nil,
 		hyperliquid.InfoOptDebugMode(),
 	)
+	if err != nil {
+		t.Fatalf("Failed to create info: %v", err)
+	}
+	return info
 }
 
 func newTestExchange(t *testing.T) *hyperliquid.Exchange {
@@ -76,9 +80,9 @@ func newTestExchange(t *testing.T) *hyperliquid.Exchange {
 	}
 
 	// Initialize test exchange
-	return hyperliquid.NewExchange(
+	ex, err := hyperliquid.NewExchange(
 		context.TODO(),
-		testPrivateKey,
+		hyperliquid.NewAccount(testPrivateKey),
 		apiURL,
 		nil,
 		vaultAddr,
@@ -87,4 +91,8 @@ func newTestExchange(t *testing.T) *hyperliquid.Exchange {
 		nil,
 		hyperliquid.ExchangeOptDebugMode(),
 	)
+	if err != nil {
+		t.Fatalf("Failed to create exchange: %v", err)
+	}
+	return ex
 }

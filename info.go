@@ -31,7 +31,7 @@ func NewInfo(
 	spotMeta *SpotMeta,
 	perpDexs *MixedArray,
 	opts ...InfoOpt,
-) *Info {
+) (*Info, error) {
 	info := &Info{
 		coinToAsset:    make(map[string]int),
 		assetToDecimal: make(map[int]int),
@@ -51,7 +51,7 @@ func NewInfo(
 		var err error
 		meta, err = info.Meta(ctx)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
 
@@ -59,7 +59,7 @@ func NewInfo(
 		var err error
 		spotMeta, err = info.SpotMeta(ctx)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
 
@@ -71,7 +71,7 @@ func NewInfo(
 			perpDexsNew, err := info.PerpDexs(ctx)
 			perpDexs = &perpDexsNew
 			if err != nil {
-				panic(err)
+				return nil, err
 			}
 		}
 		perpDexIndex := -1
@@ -86,9 +86,7 @@ func NewInfo(
 			}
 		}
 		if perpDexIndex < 0 {
-			panic(
-				fmt.Errorf("unknown perp dex %q (not present in /info perpDexs)", info.perpDexName),
-			)
+			return nil, fmt.Errorf("unknown perp dex %q (not present in /info perpDexs)", info.perpDexName)
 		}
 		base := builderPerpAssetBase + perpDexIndex*10000
 		for idxInMeta, assetInfo := range meta.Universe {
@@ -122,7 +120,7 @@ func NewInfo(
 		}
 	}
 
-	return info
+	return info, nil
 }
 
 // postTimeRangeRequest makes a POST request with time range parameters
@@ -172,7 +170,10 @@ func parseMetaResponse(resp []byte) (*Meta, error) {
 
 	marginTablesResult := make([]MarginTable, len(marginTables))
 	for i, marginTable := range marginTables {
-		id := marginTable[0].(float64)
+		id, ok := marginTable[0].(float64)
+		if !ok {
+			return nil, fmt.Errorf("expected float64 for margin table ID at index %d, got %T", i, marginTable[0])
+		}
 		tableBytes, err := json.Marshal(marginTable[1])
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal margin table data: %w", err)
@@ -193,9 +194,14 @@ func parseMetaResponse(resp []byte) (*Meta, error) {
 			return nil, fmt.Errorf("failed to unmarshal margin tiers: %w", err)
 		}
 
+		desc, ok := marginTableData["description"].(string)
+		if !ok {
+			return nil, fmt.Errorf("expected string for margin table description at index %d, got %T", i, marginTableData["description"])
+		}
+
 		marginTablesResult[i] = MarginTable{
 			ID:          int(id),
-			Description: marginTableData["description"].(string),
+			Description: desc,
 			MarginTiers: marginTiers,
 		}
 	}

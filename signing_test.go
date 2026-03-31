@@ -2,6 +2,7 @@ package hyperliquid
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"strings"
 	"testing"
@@ -220,7 +221,8 @@ func TestSignL1Action(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			signature, err := SignL1Action(
-				privateKey,
+				context.Background(),
+				NewAccount(privateKey),
 				tt.action,
 				tt.vaultAddress,
 				tt.timestamp,
@@ -299,7 +301,8 @@ func TestDebugActionHash(t *testing.T) {
 
 	// Generate signature
 	signature, err := SignL1Action(
-		privateKey,
+		context.Background(),
+		NewAccount(privateKey),
 		action,
 		vaultAddress,
 		timestamp,

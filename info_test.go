@@ -9,8 +9,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func mustNewInfo(t testing.TB, baseURL string) *Info {
+	t.Helper()
+	info, err := NewInfo(context.Background(), baseURL, true, nil, nil, nil)
+	require.NoError(t, err)
+	return info
+}
+
 func TestMetaAndAssetCtxs(t *testing.T) {
-	info := NewInfo(context.Background(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	initRecorder(t, false, "MetaAndAssetCtxs")
 
@@ -130,7 +137,7 @@ func TestMetaAndAssetCtxs(t *testing.T) {
 }
 
 func TestSpotMetaAndAssetCtxs(t *testing.T) {
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	initRecorder(t, false, "SpotMetaAndAssetCtxs")
 
@@ -193,7 +200,7 @@ func TestSpotMetaAndAssetCtxs(t *testing.T) {
 }
 
 func TestMeta(t *testing.T) {
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	initRecorder(t, false, "Meta")
 
@@ -243,7 +250,7 @@ func TestMeta(t *testing.T) {
 }
 
 func TestSpotMeta(t *testing.T) {
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	initRecorder(t, false, "SpotMeta")
 
@@ -312,7 +319,7 @@ func TestQueryOrderByOid(t *testing.T) {
 		useTestnet   bool
 	}
 
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	cases := []tc{
 		{
@@ -413,7 +420,7 @@ func TestQueryOrderByOid(t *testing.T) {
 
 			var infoInstance *Info
 			if tc.useTestnet {
-				infoInstance = NewInfo(context.TODO(), TestnetAPIURL, true, nil, nil, nil)
+				infoInstance = mustNewInfo(tt, TestnetAPIURL)
 			} else {
 				infoInstance = info
 			}
@@ -465,7 +472,7 @@ func TestUserFillsByTime(t *testing.T) {
 		useTestnet   bool
 	}
 
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	cases := []tc{
 		{
@@ -531,7 +538,7 @@ func TestUserFillsByTime(t *testing.T) {
 
 			var infoInstance *Info
 			if tc.useTestnet {
-				infoInstance = NewInfo(context.TODO(), TestnetAPIURL, true, nil, nil, nil)
+				infoInstance = mustNewInfo(tt, TestnetAPIURL)
 			} else {
 				infoInstance = info
 			}
@@ -581,7 +588,7 @@ func TestSpotUserState(t *testing.T) {
 		useTestnet   bool
 	}
 
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	cases := []tc{
 		{
@@ -624,7 +631,7 @@ func TestSpotUserState(t *testing.T) {
 
 			var infoInstance *Info
 			if tc.useTestnet {
-				infoInstance = NewInfo(context.TODO(), TestnetAPIURL, true, nil, nil, nil)
+				infoInstance = mustNewInfo(tt, TestnetAPIURL)
 			} else {
 				infoInstance = info
 			}
@@ -670,7 +677,7 @@ func TestUserActiveAssetData(t *testing.T) {
 		useTestnet   bool
 	}
 
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	cases := []tc{
 		{
@@ -700,7 +707,7 @@ func TestUserActiveAssetData(t *testing.T) {
 
 			var infoInstance *Info
 			if tc.useTestnet {
-				infoInstance = NewInfo(context.TODO(), TestnetAPIURL, true, nil, nil, nil)
+				infoInstance = mustNewInfo(tt, TestnetAPIURL)
 			} else {
 				infoInstance = info
 			}
@@ -728,7 +735,7 @@ func TestUserActiveAssetData(t *testing.T) {
 }
 
 func TestTokenDetails(t *testing.T) {
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	type tc struct {
 		name    string
@@ -760,7 +767,7 @@ func TestTokenDetails(t *testing.T) {
 }
 
 func TestPerpDexs(t *testing.T) {
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	initRecorder(t, false, "PerpDexs")
 
@@ -784,7 +791,7 @@ func TestPerpDexs(t *testing.T) {
 }
 
 func TestMetaWithDex(t *testing.T) {
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	initRecorder(t, false, "Meta_WithDex")
 
@@ -804,7 +811,7 @@ func TestMetaWithDex(t *testing.T) {
 func TestUserStateWithDex(t *testing.T) {
 	// Use a known test address
 	testAddress := "0xcd5051944f780a621ee62e39e493c489668acf4d"
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	initRecorder(t, false, "UserState_WithDex")
 
@@ -821,7 +828,7 @@ func TestUserStateWithDex(t *testing.T) {
 }
 
 func TestAllMidsWithDex(t *testing.T) {
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	initRecorder(t, false, "AllMids_WithDex")
 
@@ -841,7 +848,7 @@ func TestAllMidsWithDex(t *testing.T) {
 func TestOpenOrdersWithDex(t *testing.T) {
 	// Use a known test address
 	testAddress := "0xcd5051944f780a621ee62e39e493c489668acf4d"
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	initRecorder(t, false, "OpenOrders_WithDex")
 
@@ -860,7 +867,7 @@ func TestOpenOrdersWithDex(t *testing.T) {
 func TestFrontendOpenOrdersWithDex(t *testing.T) {
 	// Use a known test address
 	testAddress := "0xcd5051944f780a621ee62e39e493c489668acf4d"
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	initRecorder(t, false, "FrontendOpenOrders_WithDex")
 
@@ -877,7 +884,7 @@ func TestFrontendOpenOrdersWithDex(t *testing.T) {
 }
 
 func TestPerpDexLimits(t *testing.T) {
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	// First get available DEXs
 	initRecorder(t, false, "PerpDexs_ForLimits")
@@ -918,7 +925,7 @@ func TestPerpDexLimits(t *testing.T) {
 }
 
 func TestPerpDexStatus(t *testing.T) {
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	// First get available DEXs to test with a specific DEX
 	initRecorder(t, false, "PerpDexs_ForStatus")
@@ -952,7 +959,7 @@ func TestPerpDexStatus(t *testing.T) {
 }
 
 func TestPerpDeployAuctionStatus(t *testing.T) {
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	initRecorder(t, false, "PerpDeployAuctionStatus")
 
@@ -969,7 +976,7 @@ func TestPerpDeployAuctionStatus(t *testing.T) {
 }
 
 func TestPerpDexLimits_RequiresNonEmptyDex(t *testing.T) {
-	info := NewInfo(context.TODO(), MainnetAPIURL, true, nil, nil, nil)
+	info := mustNewInfo(t, MainnetAPIURL)
 
 	// PerpDexLimits should fail with empty dex
 	_, err := info.PerpDexLimits(context.TODO(), "")

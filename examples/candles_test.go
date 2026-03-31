@@ -11,7 +11,7 @@ import (
 
 func TestCandlesSnapshot(t *testing.T) {
 	_ = loadEnvClean()
-	info := hyperliquid.NewInfo(
+	info, err := hyperliquid.NewInfo(
 		context.Background(),
 		hyperliquid.MainnetAPIURL,
 		true,
@@ -19,6 +19,9 @@ func TestCandlesSnapshot(t *testing.T) {
 		nil,
 		nil,
 	)
+	if err != nil {
+		t.Fatalf("Failed to create info: %v", err)
+	}
 
 	now := time.Now()
 	startTime := now.Add(-1 * time.Hour).UnixMilli()
