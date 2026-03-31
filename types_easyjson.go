@@ -7,6 +7,7 @@ import (
 	easyjson "github.com/mailru/easyjson"
 	jlexer "github.com/mailru/easyjson/jlexer"
 	jwriter "github.com/mailru/easyjson/jwriter"
+	decimal "github.com/shopspring/decimal"
 )
 
 // suppress unused package warning
@@ -4150,12 +4151,14 @@ func easyjson6601e8cdDecodeGithubComSoniricoGoHyperliquid34(in *jlexer.Lexer, ou
 				out.EntryPx = nil
 			} else {
 				if out.EntryPx == nil {
-					out.EntryPx = new(string)
+					out.EntryPx = new(decimal.Decimal)
 				}
 				if in.IsNull() {
 					in.Skip()
 				} else {
-					*out.EntryPx = string(in.String())
+					if data := in.Raw(); in.Ok() {
+						in.AddError((*out.EntryPx).UnmarshalJSON(data))
+					}
 				}
 			}
 		case "leverage":
@@ -4170,43 +4173,55 @@ func easyjson6601e8cdDecodeGithubComSoniricoGoHyperliquid34(in *jlexer.Lexer, ou
 				out.LiquidationPx = nil
 			} else {
 				if out.LiquidationPx == nil {
-					out.LiquidationPx = new(string)
+					out.LiquidationPx = new(decimal.Decimal)
 				}
 				if in.IsNull() {
 					in.Skip()
 				} else {
-					*out.LiquidationPx = string(in.String())
+					if data := in.Raw(); in.Ok() {
+						in.AddError((*out.LiquidationPx).UnmarshalJSON(data))
+					}
 				}
 			}
 		case "marginUsed":
 			if in.IsNull() {
 				in.Skip()
 			} else {
-				out.MarginUsed = string(in.String())
+				if data := in.Raw(); in.Ok() {
+					in.AddError((out.MarginUsed).UnmarshalJSON(data))
+				}
 			}
 		case "positionValue":
 			if in.IsNull() {
 				in.Skip()
 			} else {
-				out.PositionValue = string(in.String())
+				if data := in.Raw(); in.Ok() {
+					in.AddError((out.PositionValue).UnmarshalJSON(data))
+				}
 			}
 		case "returnOnEquity":
 			if in.IsNull() {
 				in.Skip()
 			} else {
-				out.ReturnOnEquity = string(in.String())
+				if data := in.Raw(); in.Ok() {
+					in.AddError((out.ReturnOnEquity).UnmarshalJSON(data))
+				}
 			}
 		case "szi":
 			if in.IsNull() {
 				in.Skip()
 			} else {
-				out.Szi = string(in.String())
+				if data := in.Raw(); in.Ok() {
+					in.AddError((out.Szi).UnmarshalJSON(data))
+				}
 			}
 		case "unrealizedPnl":
 			if in.IsNull() {
 				in.Skip()
 			} else {
-				out.UnrealizedPnl = string(in.String())
+				if data := in.Raw(); in.Ok() {
+					in.AddError((out.UnrealizedPnl).UnmarshalJSON(data))
+				}
 			}
 		case "cumFunding":
 			if in.IsNull() {
@@ -4247,7 +4262,7 @@ func easyjson6601e8cdEncodeGithubComSoniricoGoHyperliquid34(out *jwriter.Writer,
 		if in.EntryPx == nil {
 			out.RawString("null")
 		} else {
-			out.String(string(*in.EntryPx))
+			out.Raw((*in.EntryPx).MarshalJSON())
 		}
 	}
 	{
@@ -4261,33 +4276,33 @@ func easyjson6601e8cdEncodeGithubComSoniricoGoHyperliquid34(out *jwriter.Writer,
 		if in.LiquidationPx == nil {
 			out.RawString("null")
 		} else {
-			out.String(string(*in.LiquidationPx))
+			out.Raw((*in.LiquidationPx).MarshalJSON())
 		}
 	}
 	{
 		const prefix string = ",\"marginUsed\":"
 		out.RawString(prefix)
-		out.String(string(in.MarginUsed))
+		out.Raw((in.MarginUsed).MarshalJSON())
 	}
 	{
 		const prefix string = ",\"positionValue\":"
 		out.RawString(prefix)
-		out.String(string(in.PositionValue))
+		out.Raw((in.PositionValue).MarshalJSON())
 	}
 	{
 		const prefix string = ",\"returnOnEquity\":"
 		out.RawString(prefix)
-		out.String(string(in.ReturnOnEquity))
+		out.Raw((in.ReturnOnEquity).MarshalJSON())
 	}
 	{
 		const prefix string = ",\"szi\":"
 		out.RawString(prefix)
-		out.String(string(in.Szi))
+		out.Raw((in.Szi).MarshalJSON())
 	}
 	{
 		const prefix string = ",\"unrealizedPnl\":"
 		out.RawString(prefix)
-		out.String(string(in.UnrealizedPnl))
+		out.Raw((in.UnrealizedPnl).MarshalJSON())
 	}
 	if in.CumFunding != nil {
 		const prefix string = ",\"cumFunding\":"
@@ -6849,25 +6864,33 @@ func easyjson6601e8cdDecodeGithubComSoniricoGoHyperliquid57(in *jlexer.Lexer, ou
 			if in.IsNull() {
 				in.Skip()
 			} else {
-				out.AccountValue = string(in.String())
+				if data := in.Raw(); in.Ok() {
+					in.AddError((out.AccountValue).UnmarshalJSON(data))
+				}
 			}
 		case "totalMarginUsed":
 			if in.IsNull() {
 				in.Skip()
 			} else {
-				out.TotalMarginUsed = string(in.String())
+				if data := in.Raw(); in.Ok() {
+					in.AddError((out.TotalMarginUsed).UnmarshalJSON(data))
+				}
 			}
 		case "totalNtlPos":
 			if in.IsNull() {
 				in.Skip()
 			} else {
-				out.TotalNtlPos = string(in.String())
+				if data := in.Raw(); in.Ok() {
+					in.AddError((out.TotalNtlPos).UnmarshalJSON(data))
+				}
 			}
 		case "totalRawUsd":
 			if in.IsNull() {
 				in.Skip()
 			} else {
-				out.TotalRawUsd = string(in.String())
+				if data := in.Raw(); in.Ok() {
+					in.AddError((out.TotalRawUsd).UnmarshalJSON(data))
+				}
 			}
 		default:
 			in.SkipRecursive()
@@ -6886,22 +6909,22 @@ func easyjson6601e8cdEncodeGithubComSoniricoGoHyperliquid57(out *jwriter.Writer,
 	{
 		const prefix string = ",\"accountValue\":"
 		out.RawString(prefix[1:])
-		out.String(string(in.AccountValue))
+		out.Raw((in.AccountValue).MarshalJSON())
 	}
 	{
 		const prefix string = ",\"totalMarginUsed\":"
 		out.RawString(prefix)
-		out.String(string(in.TotalMarginUsed))
+		out.Raw((in.TotalMarginUsed).MarshalJSON())
 	}
 	{
 		const prefix string = ",\"totalNtlPos\":"
 		out.RawString(prefix)
-		out.String(string(in.TotalNtlPos))
+		out.Raw((in.TotalNtlPos).MarshalJSON())
 	}
 	{
 		const prefix string = ",\"totalRawUsd\":"
 		out.RawString(prefix)
-		out.String(string(in.TotalRawUsd))
+		out.Raw((in.TotalRawUsd).MarshalJSON())
 	}
 	out.RawByte('}')
 }

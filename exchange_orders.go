@@ -395,7 +395,7 @@ func (e *Exchange) MarketClose(
 			continue
 		}
 
-		szi := parseFloat(pos.Szi)
+		szi := pos.Szi.InexactFloat64()
 		var size float64
 		if sz != nil {
 			size = *sz

@@ -2,6 +2,8 @@ package hyperliquid
 
 import (
 	json "encoding/json"
+
+	"github.com/shopspring/decimal"
 )
 
 //go:generate easyjson -all
@@ -195,16 +197,16 @@ type AssetPosition struct {
 }
 
 type Position struct {
-	Coin           string      `json:"coin"`
-	EntryPx        *string     `json:"entryPx"`
-	Leverage       Leverage    `json:"leverage"`
-	LiquidationPx  *string     `json:"liquidationPx"`
-	MarginUsed     string      `json:"marginUsed"`
-	PositionValue  string      `json:"positionValue"`
-	ReturnOnEquity string      `json:"returnOnEquity"`
-	Szi            string      `json:"szi"`
-	UnrealizedPnl  string      `json:"unrealizedPnl"`
-	CumFunding     *CumFunding `json:"cumFunding,omitempty"`
+	Coin           string           `json:"coin"`
+	EntryPx        *decimal.Decimal `json:"entryPx"`
+	Leverage       Leverage         `json:"leverage"`
+	LiquidationPx  *decimal.Decimal `json:"liquidationPx"`
+	MarginUsed     decimal.Decimal  `json:"marginUsed"`
+	PositionValue  decimal.Decimal  `json:"positionValue"`
+	ReturnOnEquity decimal.Decimal  `json:"returnOnEquity"`
+	Szi            decimal.Decimal  `json:"szi"`
+	UnrealizedPnl  decimal.Decimal  `json:"unrealizedPnl"`
+	CumFunding     *CumFunding      `json:"cumFunding,omitempty"`
 }
 
 type Leverage struct {
@@ -239,10 +241,10 @@ type SpotUserState struct {
 }
 
 type MarginSummary struct {
-	AccountValue    string `json:"accountValue"`
-	TotalMarginUsed string `json:"totalMarginUsed"`
-	TotalNtlPos     string `json:"totalNtlPos"`
-	TotalRawUsd     string `json:"totalRawUsd"`
+	AccountValue    decimal.Decimal `json:"accountValue"`
+	TotalMarginUsed decimal.Decimal `json:"totalMarginUsed"`
+	TotalNtlPos     decimal.Decimal `json:"totalNtlPos"`
+	TotalRawUsd     decimal.Decimal `json:"totalRawUsd"`
 }
 
 type OpenOrder struct {
