@@ -43,20 +43,20 @@ func keyNotification(_ string) string {
 	return key(ChannelNotification)
 }
 
-func keyOrderUpdates(_ string) string {
+func keyOrderUpdates(user string) string {
 	// Order updates are user-specific but don't contain user info in the message itself.
 	// The dispatching is handled by the subscription system based on the subscription key.
-	return key(ChannelOrderUpdates)
+	return key(ChannelOrderUpdates, user)
 }
 
 func keyUserFills(user string) string {
 	return key(ChannelUserFills, user)
 }
 
-func keyWebData2(_ string) string {
+func keyWebData2(user string) string {
 	// WebData2 messages are user-specific but don't contain user info in the message itself.
 	// The dispatching is handled by the subscription system based on the subscription key.
-	return key(ChannelWebData2)
+	return key(ChannelWebData2, user)
 }
 
 func keyBbo(coin string) string {

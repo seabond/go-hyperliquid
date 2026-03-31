@@ -151,6 +151,11 @@ type (
 		StatusTimestamp int64            `json:"statusTimestamp"`
 	}
 
+	WsOrderWithUser struct {
+		WsOrder
+		User string `json:"user"`
+	}
+
 	WsBasicOrder struct {
 		Coin      string  `json:"coin"`
 		Side      string  `json:"side"`

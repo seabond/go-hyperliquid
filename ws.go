@@ -21,7 +21,7 @@ import (
 
 const (
 	// pingInterval is the interval for sending ping messages to keep WebSocket alive
-	pingInterval = 50 * time.Second
+	pingInterval = 30 * time.Second
 
 	// wsReadTimeout is the default maximum duration to wait for a single read from
 	// the server before treating the connection as stalled. Must exceed pingInterval
@@ -48,8 +48,11 @@ type WebsocketClient struct {
 	closeOnce             sync.Once
 	reconnectWait         time.Duration
 	readTimeout           time.Duration
+	pingEvery             time.Duration
 	debug                 bool
 	logger                lol.Logger
+	onConnect             func(context.Context, bool)
+	hasConnected          bool
 }
 
 var upstreamHosts map[string]struct{}
@@ -107,6 +110,7 @@ func NewWebsocketClient(baseURL string, opts ...WsOpt) *WebsocketClient {
 		done:          make(chan struct{}),
 		reconnectWait: time.Second,
 		readTimeout:   wsReadTimeout,
+		pingEvery:     pingInterval,
 		subscribers:   make(map[string]*uniqSubscriber),
 		msgDispatcherRegistry: map[string]msgDispatcher{
 			ChannelPong:           NewPongDispatcher(),
@@ -157,10 +161,24 @@ func (w *WebsocketClient) Connect(ctx context.Context) error {
 
 	w.conn = conn
 
+	w.reconnectWait = time.Second
+
+	hook := w.onConnect
+	reconnected := w.hasConnected
+	w.hasConnected = true
+
 	go w.readPump(ctx)
 	go w.pingPump(ctx)
 
-	return w.resubscribeAll()
+	if err = w.resubscribeAll(); err != nil {
+		return err
+	}
+
+	if hook != nil {
+		hook(ctx, reconnected)
+	}
+
+	return nil
 }
 
 type Handler[T subscriptable] func(wsMessage) (T, error)
@@ -300,7 +318,7 @@ func (w *WebsocketClient) readPump(ctx context.Context) {
 }
 
 func (w *WebsocketClient) pingPump(ctx context.Context) {
-	ticker := time.NewTicker(pingInterval)
+	ticker := time.NewTicker(w.pingEvery)
 	defer ticker.Stop()
 
 	for {
@@ -317,6 +335,17 @@ func (w *WebsocketClient) pingPump(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (w *WebsocketClient) ForceReconnect(ctx context.Context) {
+	w.mu.Lock()
+	if w.conn != nil {
+		_ = w.conn.Close()
+		w.conn = nil
+	}
+	w.mu.Unlock()
+
+	go w.reconnect(ctx)
 }
 
 func (w *WebsocketClient) dispatch(msg wsMessage) error {

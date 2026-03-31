@@ -1,6 +1,7 @@
 package hyperliquid
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"time"
@@ -120,6 +121,20 @@ func InfoOptClientOptions(opts ...ClientOpt) InfoOpt {
 func WsOptReadTimeout(timeout time.Duration) WsOpt {
 	return func(w *WebsocketClient) {
 		w.readTimeout = timeout
+	}
+}
+
+// WsOptPingInterval sets the application ping interval.
+func WsOptPingInterval(interval time.Duration) WsOpt {
+	return func(w *WebsocketClient) {
+		w.pingEvery = interval
+	}
+}
+
+// WsOptOnConnect registers a hook that runs after a successful connect or reconnect.
+func WsOptOnConnect(fn func(context.Context, bool)) WsOpt {
+	return func(w *WebsocketClient) {
+		w.onConnect = fn
 	}
 }
 

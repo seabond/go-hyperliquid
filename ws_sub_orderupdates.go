@@ -8,7 +8,7 @@ type OrderUpdatesSubscriptionParams struct {
 
 func (w *WebsocketClient) OrderUpdates(
 	params OrderUpdatesSubscriptionParams,
-	callback func([]WsOrder, error),
+	callback func([]WsOrderWithUser, error),
 ) (*Subscription, error) {
 	payload := remoteOrderUpdatesSubscriptionPayload{
 		Type: ChannelOrderUpdates,
@@ -22,6 +22,14 @@ func (w *WebsocketClient) OrderUpdates(
 			return
 		}
 
-		callback([]WsOrder(orders), nil)
+		callbackOrders := make([]WsOrderWithUser, len(orders))
+		for i := range orders {
+			callbackOrders[i] = WsOrderWithUser{
+				WsOrder: orders[i],
+				User:    params.User,
+			}
+		}
+
+		callback(callbackOrders, nil)
 	})
 }
