@@ -2,7 +2,6 @@ package hyperliquid
 
 import (
 	"context"
-	"encoding/json"
 	"sync/atomic"
 	"time"
 
@@ -200,7 +199,7 @@ func (e *Exchange) executeAction(ctx context.Context, action, result any) error 
 		return err
 	}
 
-	if err := json.Unmarshal(resp, result); err != nil {
+	if err := jUnmarshal(resp, result); err != nil {
 		return err
 	}
 
@@ -241,7 +240,7 @@ func (e *Exchange) postAction(
 
 	// Debug logging
 	if e.debug { //nolint:staticcheck // Empty branch for future debugging
-		if jsonPayload, err := json.MarshalIndent(payload, "", "  "); err == nil {
+		if jsonPayload, err := jMarshalIndent(payload, "", "  "); err == nil {
 			println("=== OUTGOING EXCHANGE PAYLOAD ===")
 			println(string(jsonPayload))
 			println("=================================")

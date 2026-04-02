@@ -1,7 +1,6 @@
 package hyperliquid
 
 import (
-	"encoding/json"
 	"fmt"
 )
 
@@ -22,7 +21,7 @@ func NewMsgDispatcher[T subscriptable](channel string) msgDispatcher {
 		}
 
 		var x T
-		if err := json.Unmarshal(msg.Data, &x); err != nil {
+		if err := jUnmarshal(msg.Data, &x); err != nil {
 			return fmt.Errorf("failed to unmarshal message: %v", err)
 		}
 

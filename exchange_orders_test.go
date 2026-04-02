@@ -1,10 +1,10 @@
 package hyperliquid
 
 import (
+	"encoding/json"
 	"bytes"
 	"context"
 	"crypto/ecdsa"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"

@@ -2,7 +2,6 @@ package hyperliquid
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 )
 
@@ -17,7 +16,7 @@ type CreateOrderRequest struct {
 }
 
 func (s *CreateOrderRequest) String() string {
-	data, _ := json.Marshal(s)
+	data, _ := jMarshal(s)
 	return string(data)
 }
 
@@ -41,7 +40,7 @@ type OrderStatus struct {
 }
 
 func (s *OrderStatus) String() string {
-	data, _ := json.Marshal(s)
+	data, _ := jMarshal(s)
 	return string(data)
 }
 

@@ -49,7 +49,7 @@ func (w WsOrders) Key() string {
 func (w WebData2) Key() string {
 	// WebData2 messages are user-specific but don't contain user info in the message itself.
 	// The dispatching is handled by the subscription system based on the subscription key.
-	return ChannelWebData2
+	return keyWebData2(w.User)
 }
 
 func (w Bbo) Key() string { return keyBbo(w.Coin) }
@@ -74,17 +74,23 @@ func (c ClearinghouseStateMessage) Key() string {
 func (o OpenOrders) Key() string {
 	// OpenOrders messages contain user and dex info, but we use the subscription key for dispatching
 	// The subscription key already includes dex, so we just return a generic key
-	return ChannelOpenOrders
+	if o.Dex == "" {
+		return key(ChannelOpenOrders, o.User)
+	}
+	return key(ChannelOpenOrders, o.User, o.Dex)
 }
 
 func (t TwapStates) Key() string {
 	// TwapStates messages contain user and dex info, but we use the subscription key for dispatching
 	// The subscription key already includes dex, so we just return a generic key
-	return ChannelTwapStates
+	if t.Dex == "" {
+		return key(ChannelTwapStates, t.User)
+	}
+	return key(ChannelTwapStates, t.User, t.Dex)
 }
 
 func (w WebData3) Key() string {
 	// WebData3 messages are user-specific but don't contain user/dex info in the message itself.
 	// The dispatching is handled by the subscription system based on the subscription key.
-	return ChannelWebData3
+	return key(ChannelWebData3, w.UserState.User)
 }

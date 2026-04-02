@@ -6,7 +6,6 @@ package hyperliquid
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -48,7 +47,7 @@ func newClient(baseURL string, opts ...ClientOpt) *client {
 }
 
 func (c *client) post(ctx context.Context, path string, payload any) ([]byte, error) {
-	jsonData, err := json.Marshal(payload)
+	jsonData, err := jMarshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal payload: %w", err)
 	}
@@ -97,11 +96,11 @@ func (c *client) post(ctx context.Context, path string, payload any) ([]byte, er
 	}
 
 	if resp.StatusCode >= httpErrorStatusCode {
-		if !json.Valid(body) {
+		if !jValid(body) {
 			return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
 		}
 		var apiErr APIError
-		if err := json.Unmarshal(body, &apiErr); err != nil {
+		if err := jUnmarshal(body, &apiErr); err != nil {
 			return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
 		}
 		return nil, apiErr

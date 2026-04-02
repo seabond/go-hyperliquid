@@ -1,8 +1,8 @@
 package hyperliquid
 
 import (
-	"context"
 	"encoding/json"
+	"context"
 	"fmt"
 )
 
@@ -154,17 +154,17 @@ func (i *Info) postTimeRangeRequest(
 
 func parseMetaResponse(resp []byte) (*Meta, error) {
 	var meta map[string]json.RawMessage
-	if err := json.Unmarshal(resp, &meta); err != nil {
+	if err := jUnmarshal(resp, &meta); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal meta response: %w", err)
 	}
 
 	var universe []AssetInfo
-	if err := json.Unmarshal(meta["universe"], &universe); err != nil {
+	if err := jUnmarshal(meta["universe"], &universe); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal universe: %w", err)
 	}
 
 	var marginTables [][]any
-	if err := json.Unmarshal(meta["marginTables"], &marginTables); err != nil {
+	if err := jUnmarshal(meta["marginTables"], &marginTables); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal margin tables: %w", err)
 	}
 
@@ -174,23 +174,23 @@ func parseMetaResponse(resp []byte) (*Meta, error) {
 		if !ok {
 			return nil, fmt.Errorf("expected float64 for margin table ID at index %d, got %T", i, marginTable[0])
 		}
-		tableBytes, err := json.Marshal(marginTable[1])
+		tableBytes, err := jMarshal(marginTable[1])
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal margin table data: %w", err)
 		}
 
 		var marginTableData map[string]any
-		if err := json.Unmarshal(tableBytes, &marginTableData); err != nil {
+		if err := jUnmarshal(tableBytes, &marginTableData); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal margin table data: %w", err)
 		}
 
-		marginTiersBytes, err := json.Marshal(marginTableData["marginTiers"])
+		marginTiersBytes, err := jMarshal(marginTableData["marginTiers"])
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal margin tiers: %w", err)
 		}
 
 		var marginTiers []MarginTier
-		if err := json.Unmarshal(marginTiersBytes, &marginTiers); err != nil {
+		if err := jUnmarshal(marginTiersBytes, &marginTiers); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal margin tiers: %w", err)
 		}
 
@@ -239,7 +239,7 @@ func (i *Info) SpotMeta(ctx context.Context) (*SpotMeta, error) {
 	}
 
 	var spotMeta SpotMeta
-	if err := json.Unmarshal(resp, &spotMeta); err != nil {
+	if err := jUnmarshal(resp, &spotMeta); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal spot meta response: %w", err)
 	}
 
@@ -268,7 +268,7 @@ func (i *Info) UserState(ctx context.Context, address string, dex ...string) (*U
 	}
 
 	var result UserState
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal user state: %w", err)
 	}
 	return &result, nil
@@ -284,7 +284,7 @@ func (i *Info) SpotUserState(ctx context.Context, address string) (*SpotUserStat
 	}
 
 	var result SpotUserState
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal spot user state: %w", err)
 	}
 	return &result, nil
@@ -308,7 +308,7 @@ func (i *Info) OpenOrders(ctx context.Context, address string, dex ...string) ([
 	}
 
 	var result []OpenOrder
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal open orders: %w", err)
 	}
 	return result, nil
@@ -336,7 +336,7 @@ func (i *Info) FrontendOpenOrders(
 	}
 
 	var result []FrontendOpenOrder
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal frontend open orders: %w", err)
 	}
 	return result, nil
@@ -359,7 +359,7 @@ func (i *Info) AllMids(ctx context.Context, dex ...string) (map[string]string, e
 	}
 
 	var result map[string]string
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal all mids: %w", err)
 	}
 	return result, nil
@@ -380,7 +380,7 @@ func (i *Info) UserFills(ctx context.Context, params UserFillsParams) ([]Fill, e
 	}
 
 	var result []Fill
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal user fills: %w", err)
 	}
 	return result, nil
@@ -396,7 +396,7 @@ func (i *Info) HistoricalOrders(ctx context.Context, address string) ([]OrderQue
 	}
 
 	var result []OrderQueryResponse
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal historical orders: %w", err)
 	}
 	return result, nil
@@ -427,7 +427,7 @@ func (i *Info) UserFillsByTime(
 	}
 
 	var result []Fill
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal user fills by time: %w", err)
 	}
 	return result, nil
@@ -454,7 +454,7 @@ func (i *Info) MetaAndAssetCtxs(
 	}
 
 	var result []any
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal meta and asset contexts: %w", err)
 	}
 
@@ -462,7 +462,7 @@ func (i *Info) MetaAndAssetCtxs(
 		return nil, fmt.Errorf("expected at least 2 elements in response, got %d", len(result))
 	}
 
-	metaBytes, err := json.Marshal(result[0])
+	metaBytes, err := jMarshal(result[0])
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal meta data: %w", err)
 	}
@@ -472,13 +472,13 @@ func (i *Info) MetaAndAssetCtxs(
 		return nil, fmt.Errorf("failed to parse meta: %w", err)
 	}
 
-	ctxsBytes, err := json.Marshal(result[1])
+	ctxsBytes, err := jMarshal(result[1])
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal ctxs data: %w", err)
 	}
 
 	var ctxs []AssetCtx
-	if err := json.Unmarshal(ctxsBytes, &ctxs); err != nil {
+	if err := jUnmarshal(ctxsBytes, &ctxs); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal ctxs: %w", err)
 	}
 
@@ -499,7 +499,7 @@ func (i *Info) SpotMetaAndAssetCtxs(ctx context.Context) (*SpotMetaAndAssetCtxs,
 	}
 
 	var result []any
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal spot meta and asset contexts: %w", err)
 	}
 
@@ -508,24 +508,24 @@ func (i *Info) SpotMetaAndAssetCtxs(ctx context.Context) (*SpotMetaAndAssetCtxs,
 	}
 
 	// Unmarshal the first element (SpotMeta)
-	metaBytes, err := json.Marshal(result[0])
+	metaBytes, err := jMarshal(result[0])
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal meta data: %w", err)
 	}
 
 	var meta SpotMeta
-	if err := json.Unmarshal(metaBytes, &meta); err != nil {
+	if err := jUnmarshal(metaBytes, &meta); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal meta: %w", err)
 	}
 
 	// Unmarshal the second element ([]SpotAssetCtx)
-	ctxsBytes, err := json.Marshal(result[1])
+	ctxsBytes, err := jMarshal(result[1])
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal ctxs data: %w", err)
 	}
 
 	var ctxs []SpotAssetCtx
-	if err := json.Unmarshal(ctxsBytes, &ctxs); err != nil {
+	if err := jUnmarshal(ctxsBytes, &ctxs); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal ctxs: %w", err)
 	}
 
@@ -554,7 +554,7 @@ func (i *Info) FundingHistory(
 	}
 
 	var result []FundingHistory
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal funding history: %w", err)
 	}
 	return result, nil
@@ -572,7 +572,7 @@ func (i *Info) UserFundingHistory(
 	}
 
 	var result []UserFundingHistory
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal user funding history: %w", err)
 	}
 	return result, nil
@@ -597,7 +597,7 @@ func (i *Info) UserNonFundingLedgerUpdates(
 	}
 
 	var result []UserNonFundingLedgerUpdates
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal user non-funding ledger updates: %w", err)
 	}
 	return result, nil
@@ -613,7 +613,7 @@ func (i *Info) L2Snapshot(ctx context.Context, name string) (*L2Book, error) {
 	}
 
 	var result L2Book
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal L2 snapshot: %w", err)
 	}
 	return &result, nil
@@ -640,7 +640,7 @@ func (i *Info) CandlesSnapshot(
 	}
 
 	var result []Candle
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal candles snapshot: %w", err)
 	}
 	return result, nil
@@ -656,7 +656,7 @@ func (i *Info) UserFees(ctx context.Context, address string) (*UserFees, error) 
 	}
 
 	var result UserFees
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal user fees: %w", err)
 	}
 	return &result, nil
@@ -677,7 +677,7 @@ func (i *Info) UserActiveAssetData(
 	}
 
 	var result UserActiveAssetData
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal user active asset data: %w", err)
 	}
 	return &result, nil
@@ -693,7 +693,7 @@ func (i *Info) UserStakingSummary(ctx context.Context, address string) (*Staking
 	}
 
 	var result StakingSummary
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal staking summary: %w", err)
 	}
 	return &result, nil
@@ -712,7 +712,7 @@ func (i *Info) UserStakingDelegations(
 	}
 
 	var result []StakingDelegation
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal staking delegations: %w", err)
 	}
 	return result, nil
@@ -728,7 +728,7 @@ func (i *Info) UserStakingRewards(ctx context.Context, address string) ([]Stakin
 	}
 
 	var result []StakingReward
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal staking rewards: %w", err)
 	}
 	return result, nil
@@ -749,7 +749,7 @@ func (i *Info) QueryOrderByOid(
 	}
 
 	var result OrderQueryResult
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal order status: %w", err)
 	}
 	return &result, nil
@@ -769,7 +769,7 @@ func (i *Info) QueryOrderByCloid(
 	}
 
 	var result OrderQueryResult
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal order status: %w", err)
 	}
 	return &result, nil
@@ -785,7 +785,7 @@ func (i *Info) QueryReferralState(ctx context.Context, user string) (*ReferralSt
 	}
 
 	var result ReferralState
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal referral state: %w", err)
 	}
 	return &result, nil
@@ -801,7 +801,7 @@ func (i *Info) QuerySubAccounts(ctx context.Context, user string) ([]SubAccount,
 	}
 
 	var result []SubAccount
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal sub accounts: %w", err)
 	}
 	return result, nil
@@ -820,7 +820,7 @@ func (i *Info) QueryUserToMultiSigSigners(
 	}
 
 	var result []MultiSigSigner
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal multi-sig signers: %w", err)
 	}
 	return result, nil
@@ -838,7 +838,7 @@ func (i *Info) PerpDexs(ctx context.Context) (MixedArray, error) {
 	}
 
 	var result MixedArray
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal perp dexs: %w", err)
 	}
 	return result, nil
@@ -854,7 +854,7 @@ func (i *Info) TokenDetails(ctx context.Context, tokenId string) (*TokenDetail, 
 	}
 
 	var tokenDetail TokenDetail
-	if err := json.Unmarshal(resp, &tokenDetail); err != nil {
+	if err := jUnmarshal(resp, &tokenDetail); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal token detail response: %w", err)
 	}
 
@@ -877,7 +877,7 @@ func (i *Info) PerpDexLimits(ctx context.Context, dex string) (*PerpDexLimits, e
 	}
 
 	var result PerpDexLimits
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal perp dex limits: %w", err)
 	}
 	return &result, nil
@@ -899,7 +899,7 @@ func (i *Info) PerpDexStatus(ctx context.Context, dex string) (*PerpDexStatus, e
 	}
 
 	var result PerpDexStatus
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal perp dex status: %w", err)
 	}
 	return &result, nil
@@ -915,7 +915,7 @@ func (i *Info) PerpDeployAuctionStatus(ctx context.Context) (*PerpDeployAuctionS
 	}
 
 	var result PerpDeployAuctionStatus
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal perp deploy auction status: %w", err)
 	}
 	return &result, nil
@@ -932,7 +932,7 @@ func (i *Info) Portfolio(ctx context.Context, user string) ([]Portfolio, error) 
 	}
 
 	var result []Portfolio
-	if err := json.Unmarshal(resp, &result); err != nil {
+	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal portfolio: %w", err)
 	}
 	return result, nil

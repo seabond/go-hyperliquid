@@ -1,12 +1,12 @@
 package hyperliquid
 
 import (
+	"encoding/json"
 	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -512,11 +512,11 @@ func hashStructLenient(
 					uintVal = parsed
 				default:
 					// Try to convert via json marshal/unmarshal to handle edge cases
-					jsonBytes, err := json.Marshal(v)
+					jsonBytes, err := jMarshal(v)
 					if err != nil {
 						return nil, fmt.Errorf("failed to marshal value for %s: %w", t.Name, err)
 					}
-					if err := json.Unmarshal(jsonBytes, &uintVal); err != nil {
+					if err := jUnmarshal(jsonBytes, &uintVal); err != nil {
 						return nil, fmt.Errorf(
 							"failed to convert value to uint64 for %s: %w",
 							t.Name,

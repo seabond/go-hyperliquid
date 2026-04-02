@@ -1,7 +1,7 @@
 package hyperliquid
 
 import (
-	json "encoding/json"
+	"encoding/json"
 
 	"github.com/shopspring/decimal"
 )

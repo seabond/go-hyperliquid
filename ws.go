@@ -2,7 +2,6 @@ package hyperliquid
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -305,7 +304,7 @@ func (w *WebsocketClient) readPump(ctx context.Context) {
 			}
 
 			var wsMsg wsMessage
-			if err := json.Unmarshal(msg, &wsMsg); err != nil {
+			if err := jUnmarshal(msg, &wsMsg); err != nil {
 				w.logErrf("websocket message parse error: %v", err)
 				continue
 			}
@@ -417,7 +416,7 @@ func (w *WebsocketClient) writeJSON(v any) error {
 	}
 
 	if w.debug {
-		bts, _ := json.Marshal(v)
+		bts, _ := jMarshal(v)
 		w.logDebugf("[>] %s", string(bts))
 	}
 
