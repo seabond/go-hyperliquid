@@ -18,6 +18,7 @@ type Info struct {
 	debug          bool
 	client         *client
 	coinToAsset    map[string]int
+	assetToCoin    map[int]string
 	assetToDecimal map[int]int
 	perpDexName    string
 	clientOpts     []ClientOpt
@@ -34,6 +35,7 @@ func NewInfo(
 ) (*Info, error) {
 	info := &Info{
 		coinToAsset:    make(map[string]int),
+		assetToCoin:    make(map[int]string),
 		assetToDecimal: make(map[int]int),
 	}
 
@@ -92,12 +94,14 @@ func NewInfo(
 		for idxInMeta, assetInfo := range meta.Universe {
 			assetID := base + idxInMeta
 			info.coinToAsset[assetInfo.Name] = assetID
+			info.assetToCoin[assetID] = assetInfo.Name
 			info.assetToDecimal[assetID] = assetInfo.SzDecimals
 		}
 	} else {
 		// Default perp dex: asset id is just index in meta universe.
 		for asset, assetInfo := range meta.Universe {
 			info.coinToAsset[assetInfo.Name] = asset
+			info.assetToCoin[asset] = assetInfo.Name
 			info.assetToDecimal[asset] = assetInfo.SzDecimals
 		}
 	}
@@ -249,6 +253,35 @@ func (i *Info) SpotMeta(ctx context.Context) (*SpotMeta, error) {
 func (i *Info) CoinToAsset(coin string) (int, bool) {
 	result, ok := i.coinToAsset[coin]
 	return result, ok
+}
+
+// RegisterCoin adds a coin → asset mapping. Used to register builder-deployed
+// perp assets that weren't loaded during NewInfo (which only loads the default
+// dex or a single named dex).
+func (i *Info) RegisterCoin(coin string, asset, szDecimals int) {
+	i.coinToAsset[coin] = asset
+	i.assetToCoin[asset] = coin
+	i.assetToDecimal[asset] = szDecimals
+}
+
+// ResolveCoin translates an asset-index symbol like "@107" to its coin name
+// (e.g. "ALT"). If the input doesn't start with "@" or the index is unknown,
+// the original string is returned unchanged.
+func (i *Info) ResolveCoin(symbol string) string {
+	if len(symbol) < 2 || symbol[0] != '@' {
+		return symbol
+	}
+	idx := 0
+	for _, c := range symbol[1:] {
+		if c < '0' || c > '9' {
+			return symbol
+		}
+		idx = idx*10 + int(c-'0')
+	}
+	if name, ok := i.assetToCoin[idx]; ok {
+		return name
+	}
+	return symbol
 }
 
 // UserState retrieves user's perpetuals account summary
@@ -934,6 +967,43 @@ func (i *Info) Portfolio(ctx context.Context, user string) ([]Portfolio, error) 
 	var result []Portfolio
 	if err := jUnmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal portfolio: %w", err)
+	}
+	return result, nil
+}
+
+// MaxBuilderFee retrieves the maximum builder fee approved by user for builder.
+// Returns the fee in tenths of a basis point (e.g. 1 = 0.001%).
+func (i *Info) MaxBuilderFee(ctx context.Context, user, builder string) (int, error) {
+	resp, err := i.client.post(ctx, "/info", map[string]any{
+		"type":    "maxBuilderFee",
+		"user":    user,
+		"builder": builder,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to fetch max builder fee: %w", err)
+	}
+
+	var result int
+	if err := jUnmarshal(resp, &result); err != nil {
+		return 0, fmt.Errorf("failed to unmarshal max builder fee: %w", err)
+	}
+	return result, nil
+}
+
+// UserAbstraction retrieves the account abstraction mode for a user.
+// Returns one of: "default", "disabled", "unifiedAccount", "portfolioMargin", "dexAbstraction".
+func (i *Info) UserAbstraction(ctx context.Context, user string) (AbstractionMode, error) {
+	resp, err := i.client.post(ctx, "/info", map[string]any{
+		"type": "userAbstraction",
+		"user": user,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch user abstraction: %w", err)
+	}
+
+	var result AbstractionMode
+	if err := jUnmarshal(resp, &result); err != nil {
+		return "", fmt.Errorf("failed to unmarshal user abstraction: %w", err)
 	}
 	return result, nil
 }

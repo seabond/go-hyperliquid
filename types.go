@@ -702,3 +702,15 @@ type AccountHistory struct {
 
 // Portfolio represents a user's portfolio
 type Portfolio []MixedValue // [string, AccountHistory]
+
+// AbstractionMode represents the account abstraction mode
+type AbstractionMode string
+
+const (
+	AbstractionDefault          AbstractionMode = "default"
+	AbstractionDisabled         AbstractionMode = "disabled"
+	AbstractionUnifiedAccount   AbstractionMode = "unifiedAccount"
+	AbstractionPortfolioMargin  AbstractionMode = "portfolioMargin"
+	AbstractionDexAbstraction   AbstractionMode = "dexAbstraction"
+)
+

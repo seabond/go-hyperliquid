@@ -1758,6 +1758,50 @@ func (e *Exchange) CValidatorUnregister(ctx context.Context) (*ValidatorResponse
 	return &result, nil
 }
 
+// UserSetAbstraction sets the account abstraction mode using user-signed EIP-712.
+func (e *Exchange) UserSetAbstraction(
+	ctx context.Context,
+	abstraction AbstractionMode,
+) (*ApprovalResponse, error) {
+	nonce := e.nextNonce()
+
+	action := map[string]any{
+		"type":        "userSetAbstraction",
+		"user":        strings.ToLower(e.accountAddr),
+		"abstraction": string(abstraction),
+		"nonce":       big.NewInt(nonce),
+	}
+
+	payloadTypes := []apitypes.Type{
+		{Name: "hyperliquidChain", Type: "string"},
+		{Name: "user", Type: "address"},
+		{Name: "abstraction", Type: "string"},
+		{Name: "nonce", Type: "uint64"},
+	}
+
+	sig, err := e.signUserSignedAction(
+		ctx,
+		action,
+		payloadTypes,
+		"HyperliquidTransaction:UserSetAbstraction",
+		e.client.baseURL == MainnetAPIURL,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := e.postAction(ctx, action, sig, nonce)
+	if err != nil {
+		return nil, err
+	}
+
+	var result ApprovalResponse
+	if err := jUnmarshal(resp, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 func (e *Exchange) MultiSig(
 	ctx context.Context,
 	action map[string]any,

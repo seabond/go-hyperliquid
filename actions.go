@@ -338,3 +338,4 @@ type PerpDeploySetOracleAction struct {
 	Type      string    `json:"type"      msgpack:"type"`
 	SetOracle SetOracle `json:"setOracle" msgpack:"setOracle"`
 }
+

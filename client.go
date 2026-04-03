@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
+	"github.com/sethvargo/go-retry"
 	"github.com/sonirico/vago/lol"
 )
 
@@ -53,57 +55,70 @@ func (c *client) post(ctx context.Context, path string, payload any) ([]byte, er
 	}
 
 	url := c.baseURL + path
-	req, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		url,
-		bytes.NewBuffer(jsonData),
-	)
+
+	b := retry.NewExponential(200 * time.Millisecond)
+	b = retry.WithMaxRetries(3, b)
+	b = retry.WithCappedDuration(2*time.Second, b)
+
+	var body []byte
+	err = retry.Do(ctx, b, func(ctx context.Context) error {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonData))
+		if reqErr != nil {
+			return fmt.Errorf("failed to create request: %w", reqErr)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		if c.debug {
+			c.logger.WithFields(lol.Fields{
+				"method": "POST",
+				"url":    url,
+				"body":   string(jsonData),
+			}).Debug("HTTP request")
+		}
+
+		resp, doErr := c.httpClient.Do(req)
+		if doErr != nil {
+			return retry.RetryableError(fmt.Errorf("request failed: %w", doErr))
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		body = nil
+		if resp.Body != nil {
+			body, doErr = io.ReadAll(resp.Body)
+			if doErr != nil {
+				return retry.RetryableError(fmt.Errorf("failed to read response body: %w", doErr))
+			}
+		}
+
+		if c.debug {
+			c.logger.WithFields(lol.Fields{
+				"status": resp.Status,
+				"body":   string(body),
+			}).Debug("HTTP response")
+		}
+
+		// 5xx = server error, retryable.
+		if resp.StatusCode >= 500 {
+			return retry.RetryableError(fmt.Errorf("status %d: %s", resp.StatusCode, string(body)))
+		}
+
+		// 4xx = client error, not retryable.
+		if resp.StatusCode >= httpErrorStatusCode {
+			if !jValid(body) {
+				return fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
+			}
+			var apiErr APIError
+			if unmarshalErr := jUnmarshal(body, &apiErr); unmarshalErr != nil {
+				return fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
+			}
+			return apiErr
+		}
+
+		return nil
+	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	if c.debug {
-		c.logger.WithFields(lol.Fields{
-			"method": "POST",
-			"url":    url,
-			"body":   string(jsonData),
-		}).Debug("HTTP request")
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body := make([]byte, 0)
-	if resp.Body != nil {
-		body, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read response body: %w", err)
-		}
-	}
-
-	if c.debug {
-		c.logger.WithFields(lol.Fields{
-			"status": resp.Status,
-			"body":   string(body),
-		}).Debug("HTTP response")
-	}
-
-	if resp.StatusCode >= httpErrorStatusCode {
-		if !jValid(body) {
-			return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
-		}
-		var apiErr APIError
-		if err := jUnmarshal(body, &apiErr); err != nil {
-			return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
-		}
-		return nil, apiErr
+		return nil, err
 	}
 
 	return body, nil
