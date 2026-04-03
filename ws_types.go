@@ -280,10 +280,34 @@ type (
 
 	//easyjson:skip
 	AllDexsClearinghouseState struct {
-		User                string                        `json:"user"`
-		ClearinghouseStates map[string]ClearinghouseState `json:"clearinghouseStates"`
+		User                string       `json:"user"`
+		ClearinghouseStates DexStatesMap `json:"clearinghouseStates"`
 	}
 )
+
+// DexStatesMap maps dex name to ClearinghouseState.
+// Hyperliquid serializes this as an array of [key, value] tuples.
+type DexStatesMap map[string]ClearinghouseState
+
+func (m *DexStatesMap) UnmarshalJSON(data []byte) error {
+	var tuples [][2]json.RawMessage
+	if err := json.Unmarshal(data, &tuples); err != nil {
+		return err
+	}
+	*m = make(DexStatesMap, len(tuples))
+	for _, t := range tuples {
+		var key string
+		if err := json.Unmarshal(t[0], &key); err != nil {
+			return err
+		}
+		var state ClearinghouseState
+		if err := json.Unmarshal(t[1], &state); err != nil {
+			return err
+		}
+		(*m)[key] = state
+	}
+	return nil
+}
 
 var (
 	candleNoop = Candle{}
