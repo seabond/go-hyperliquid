@@ -6049,6 +6049,12 @@ func easyjson6601e8cdDecodeGithubComSoniricoGoHyperliquid49(in *jlexer.Lexer, ou
 					*out.Error = string(in.String())
 				}
 			}
+		case "waiting_for_trigger":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.WaitingForTrigger = bool(in.Bool())
+			}
 		default:
 			in.SkipRecursive()
 		}
@@ -6088,6 +6094,16 @@ func easyjson6601e8cdEncodeGithubComSoniricoGoHyperliquid49(out *jwriter.Writer,
 			out.RawString(prefix)
 		}
 		out.String(string(*in.Error))
+	}
+	{
+		const prefix string = ",\"waiting_for_trigger\":"
+		if first {
+			first = false
+			out.RawString(prefix[1:])
+		} else {
+			out.RawString(prefix)
+		}
+		out.Bool(bool(in.WaitingForTrigger))
 	}
 	out.RawByte('}')
 }
