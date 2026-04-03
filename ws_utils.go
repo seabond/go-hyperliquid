@@ -94,3 +94,7 @@ func keyWebData3(user string, dex fp.Option[string]) string {
 func keyAllDexsClearinghouseState(user string) string {
 	return key(ChannelAllDexsClearinghouseState, user)
 }
+
+func keySpotState(user string) string {
+	return key(ChannelSpotState, user)
+}

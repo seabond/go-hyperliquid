@@ -98,3 +98,7 @@ func (w WebData3) Key() string {
 func (a AllDexsClearinghouseState) Key() string {
 	return keyAllDexsClearinghouseState(a.User)
 }
+
+func (s SpotStateMessage) Key() string {
+	return keySpotState(s.User)
+}

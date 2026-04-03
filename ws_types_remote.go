@@ -207,3 +207,17 @@ func (p remoteAllDexsClearinghouseStateSubscriptionPayload) Channel() string {
 func (p remoteAllDexsClearinghouseStateSubscriptionPayload) Key() string {
 	return keyAllDexsClearinghouseState(p.User)
 }
+
+//easyjson:skip
+type remoteSpotStateSubscriptionPayload struct {
+	Type string `json:"type"`
+	User string `json:"user"`
+}
+
+func (p remoteSpotStateSubscriptionPayload) Channel() string {
+	return p.Type
+}
+
+func (p remoteSpotStateSubscriptionPayload) Key() string {
+	return keySpotState(p.User)
+}

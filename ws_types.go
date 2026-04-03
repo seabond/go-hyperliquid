@@ -24,6 +24,7 @@ const (
 	ChannelTwapStates         string = "twapStates"
 	ChannelWebData3                      string = "webData3"
 	ChannelAllDexsClearinghouseState     string = "allDexsClearinghouseState"
+	ChannelSpotState                    string = "spotState"
 )
 
 type wsMessage struct {
@@ -282,6 +283,12 @@ type (
 	AllDexsClearinghouseState struct {
 		User                string       `json:"user"`
 		ClearinghouseStates DexStatesMap `json:"clearinghouseStates"`
+	}
+
+	//easyjson:skip
+	SpotStateMessage struct {
+		User      string        `json:"user"`
+		SpotState SpotUserState `json:"spotState"`
 	}
 )
 
