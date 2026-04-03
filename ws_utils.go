@@ -90,3 +90,7 @@ func keyWebData3(user string, dex fp.Option[string]) string {
 	}
 	return key(ChannelWebData3, user, dex.UnwrapUnsafe())
 }
+
+func keyAllDexsClearinghouseState(user string) string {
+	return key(ChannelAllDexsClearinghouseState, user)
+}

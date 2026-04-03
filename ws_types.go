@@ -22,7 +22,8 @@ const (
 	ChannelClearinghouseState string = "clearinghouseState"
 	ChannelOpenOrders         string = "openOrders"
 	ChannelTwapStates         string = "twapStates"
-	ChannelWebData3           string = "webData3"
+	ChannelWebData3                      string = "webData3"
+	ChannelAllDexsClearinghouseState     string = "allDexsClearinghouseState"
 )
 
 type wsMessage struct {
@@ -275,6 +276,12 @@ type (
 	LeadingVault struct {
 		Address string `json:"address"`
 		Name    string `json:"name"`
+	}
+
+	//easyjson:skip
+	AllDexsClearinghouseState struct {
+		User                string                        `json:"user"`
+		ClearinghouseStates map[string]ClearinghouseState `json:"clearinghouseStates"`
 	}
 )
 

@@ -194,3 +194,16 @@ func (p remoteWebData3SubscriptionPayload) Channel() string {
 func (p remoteWebData3SubscriptionPayload) Key() string {
 	return keyWebData3(p.User, fp.OptionFromPtr(p.Dex))
 }
+
+type remoteAllDexsClearinghouseStateSubscriptionPayload struct {
+	Type string `json:"type"`
+	User string `json:"user"`
+}
+
+func (p remoteAllDexsClearinghouseStateSubscriptionPayload) Channel() string {
+	return p.Type
+}
+
+func (p remoteAllDexsClearinghouseStateSubscriptionPayload) Key() string {
+	return keyAllDexsClearinghouseState(p.User)
+}

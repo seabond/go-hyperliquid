@@ -94,3 +94,7 @@ func (w WebData3) Key() string {
 	// The dispatching is handled by the subscription system based on the subscription key.
 	return key(ChannelWebData3, w.UserState.User)
 }
+
+func (a AllDexsClearinghouseState) Key() string {
+	return keyAllDexsClearinghouseState(a.User)
+}
