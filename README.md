@@ -368,19 +368,25 @@ make ci-test
 - [x] Perp deployment features
 - [x] Consensus layer (validator operations)
 - [x] Full feature parity with Python SDK
+- [x] SOCKS5/HTTP proxy support (REST + WebSocket)
+- [x] WebSocket post for Exchange actions (with HTTP fallback)
+- [x] HTTP retry with exponential backoff
+- [x] allDexsClearinghouseState WS subscription (HIP-3 builder dex)
+- [x] spotState WS subscription
+- [x] LookupAsset and UnregisterAsset Info methods
+- [x] jsoniter in hot paths (perf)
 
 ### 🚀 Future Enhancements
 
 - [ ] Enhanced documentation with more examples
-- [ ] Performance optimizations
+- [x] Performance optimizations (jsoniter, WS post)
 - [ ] Additional testing and edge case coverage
-- [ ] Rate limiting and retry mechanisms
+- [x] Rate limiting and retry mechanisms (HTTP retry with backoff)
 - [ ] Monitoring and observability features
 - [x] Order management
 - [x] User account operations
 - [ ] Advanced order types
 - [ ] Historical data API
-- [ ] Rate limiting improvements
 - [ ] Connection pooling
 
 ## License
