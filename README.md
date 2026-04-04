@@ -42,6 +42,27 @@ This Go SDK provides **full feature parity** with the official Python SDK, inclu
 - **Token Delegation**: Stake tokens with validators
 - **Spot Trading**: Full spot market support
 
+### Proxy Support
+
+Route REST and WebSocket traffic through HTTP or SOCKS5 proxies:
+
+```go
+clientOpt, wsOpt := hyperliquid.ProxyURL("socks5://user:pass@host:port")
+
+// REST/Info — all HTTP requests go through the proxy
+info, _ := hyperliquid.NewInfo(ctx, baseURL, false, nil, nil, nil,
+    hyperliquid.InfoOptClientOptions(clientOpt))
+
+// Exchange — HTTP fallback goes through the proxy
+exchange := hyperliquid.NewExchange(ctx, privateKey, baseURL, nil, "", "", nil, nil,
+    hyperliquid.ExchangeOptClientOptions(clientOpt))
+
+// WebSocket — optionally route through the proxy
+ws := hyperliquid.NewWebsocketClient(baseURL, wsOpt)
+```
+
+Supported schemes: `http`, `https`, `socks5`. The `clientOpt` configures the HTTP transport for REST calls; the `wsOpt` configures the WebSocket dialer. They can be used independently — for example, proxy REST but keep WebSocket direct for lower latency.
+
 ### Advanced Features
 
 - **Agent Approval**: Approve trading agents with permissions
