@@ -86,6 +86,14 @@ func InfoOptPerpDexName(dex string) InfoOpt {
 	}
 }
 
+// ExchangeOptWS sets the WebSocket client for WS post support. When set,
+// Exchange.postAction tries WS post first and falls back to HTTP on error.
+func ExchangeOptWS(ws *WebsocketClient) ExchangeOpt {
+	return func(e *Exchange) {
+		e.ws = ws
+	}
+}
+
 // ExchangeOptL1Signer injects an L1ActionSigner. When nil, the default ECDSA implementation with privateKey is used.
 func ExchangeOptL1Signer(s L1ActionSigner) ExchangeOpt {
 	return func(e *Exchange) {

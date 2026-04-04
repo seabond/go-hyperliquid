@@ -25,6 +25,8 @@ type Exchange struct {
 
 	clientOpts []ClientOpt
 	infoOpts   []InfoOpt
+
+	ws *WebsocketClient // optional; when set, postAction tries WS post first
 }
 
 func NewExchange(
@@ -245,6 +247,16 @@ func (e *Exchange) postAction(
 			println(string(jsonPayload))
 			println("=================================")
 		}
+	}
+
+	// WS post path: try first when available. Falls back to HTTP on any error
+	// (inflight full, not connected, WS write failure, etc.).
+	if e.ws != nil {
+		resp, err := e.ws.Post(ctx, "action", payload)
+		if err == nil {
+			return []byte(resp), nil
+		}
+		// Fall through to HTTP.
 	}
 
 	return e.client.post(ctx, "/exchange", payload)

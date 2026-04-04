@@ -2,6 +2,7 @@ package hyperliquid
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -28,6 +29,25 @@ const (
 	wsReadTimeout = 90 * time.Second
 )
 
+var (
+	// ErrInflightFull is returned when the maximum number of concurrent WS post
+	// requests (100) has been reached. Callers should fall back to HTTP.
+	ErrInflightFull = errors.New("ws post: inflight limit reached")
+
+	// ErrWsNotConnected is returned when Post is called but no WS connection is active.
+	ErrWsNotConnected = errors.New("ws post: not connected")
+)
+
+// postResponse carries the result of a single WS post request back to the
+// waiting caller in Post().
+type postResponse struct {
+	Data json.RawMessage
+	Err  error
+}
+
+// maxPostInflight is the Hyperliquid WS post concurrency limit.
+const maxPostInflight = 100
+
 type Subscription struct {
 	ID      string
 	Payload any
@@ -52,6 +72,11 @@ type WebsocketClient struct {
 	logger                lol.Logger
 	onConnect             func(context.Context, bool)
 	hasConnected          bool
+
+	// WS post support: send exchange/info actions over WS instead of HTTP.
+	postIDCounter atomic.Int64            // monotonically increasing request ID
+	postInflight  sync.Map                // id (int64) -> chan postResponse
+	postSem       chan struct{}            // counting semaphore, cap = maxPostInflight
 }
 
 var upstreamHosts map[string]struct{}
@@ -110,6 +135,7 @@ func NewWebsocketClient(baseURL string, opts ...WsOpt) *WebsocketClient {
 		reconnectWait: time.Second,
 		readTimeout:   wsReadTimeout,
 		pingEvery:     pingInterval,
+		postSem:       make(chan struct{}, maxPostInflight),
 		subscribers:   make(map[string]*uniqSubscriber),
 		msgDispatcherRegistry: map[string]msgDispatcher{
 			ChannelPong:           NewPongDispatcher(),
@@ -234,6 +260,121 @@ func (w *WebsocketClient) subscribe(
 	}, nil
 }
 
+// Post sends a signed exchange (or info) request over the WebSocket and waits
+// for the correlated response. reqType is "action" or "info". payload is the
+// request body — the same map that would go to HTTP /exchange. The returned
+// json.RawMessage contains the response payload (identical to HTTP response body).
+//
+// Returns ErrWsNotConnected if the WS connection is nil.
+// Returns ErrInflightFull if maxPostInflight requests are already in-flight.
+func (w *WebsocketClient) Post(ctx context.Context, reqType string, payload any) (json.RawMessage, error) {
+	// 1. Check connection.
+	w.mu.RLock()
+	connected := w.conn != nil
+	w.mu.RUnlock()
+	if !connected {
+		return nil, ErrWsNotConnected
+	}
+
+	// 2. Acquire semaphore (non-blocking).
+	select {
+	case w.postSem <- struct{}{}:
+		defer func() { <-w.postSem }()
+	default:
+		return nil, ErrInflightFull
+	}
+
+	// 3. Generate unique request ID.
+	id := w.postIDCounter.Add(1)
+
+	// 4. Register response channel in inflight map.
+	ch := make(chan postResponse, 1)
+	w.postInflight.Store(id, ch)
+	defer w.postInflight.Delete(id)
+
+	// 5. Build and send the post message.
+	msg := map[string]any{
+		"method": "post",
+		"id":     id,
+		"request": map[string]any{
+			"type":    reqType,
+			"payload": payload,
+		},
+	}
+	if err := w.writeJSON(msg); err != nil {
+		return nil, fmt.Errorf("ws post send: %w", err)
+	}
+
+	// 6. Wait for correlated response or context cancellation.
+	select {
+	case resp := <-ch:
+		return resp.Data, resp.Err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-w.done:
+		return nil, ErrWsNotConnected
+	}
+}
+
+// failAllInflight sends an error to every pending Post caller. Called when the
+// WS connection drops so that waiters don't hang until their context expires.
+func (w *WebsocketClient) failAllInflight(err error) {
+	w.postInflight.Range(func(key, value any) bool {
+		ch := value.(chan postResponse)
+		select {
+		case ch <- postResponse{Err: err}:
+		default:
+		}
+		return true
+	})
+}
+
+// dispatchPostResponse handles an incoming "post" channel message from the WS
+// read pump. It extracts the request ID, looks up the corresponding inflight
+// channel, and delivers the result.
+func (w *WebsocketClient) dispatchPostResponse(raw json.RawMessage) {
+	// The data envelope: {"id": N, "response": {"type": "action"|"error", "payload": ...}}
+	var envelope struct {
+		ID       int64 `json:"id"`
+		Response struct {
+			Type    string          `json:"type"`
+			Payload json.RawMessage `json:"payload"`
+		} `json:"response"`
+	}
+	if err := jUnmarshal(raw, &envelope); err != nil {
+		w.logErrf("ws post: failed to parse response envelope: %v", err)
+		return
+	}
+
+	val, ok := w.postInflight.Load(envelope.ID)
+	if !ok {
+		// No waiter — the caller may have timed out and cleaned up.
+		w.logDebugf("ws post: no inflight waiter for id %d", envelope.ID)
+		return
+	}
+	ch := val.(chan postResponse)
+
+	if envelope.Response.Type == "error" {
+		// Error responses have a string payload like "400 Bad Request: ...".
+		var errMsg string
+		if err := jUnmarshal(envelope.Response.Payload, &errMsg); err != nil {
+			errMsg = string(envelope.Response.Payload)
+		}
+		select {
+		case ch <- postResponse{Err: fmt.Errorf("ws post error: %s", errMsg)}:
+		default:
+		}
+		return
+	}
+
+	// Success — pass the payload through as raw bytes so the caller can
+	// unmarshal it the same way it would unmarshal an HTTP response body.
+	select {
+	case ch <- postResponse{Data: envelope.Response.Payload}:
+	default:
+	}
+}
+
 func (w *WebsocketClient) Close() error {
 	var err error
 	w.closeOnce.Do(func() {
@@ -244,6 +385,9 @@ func (w *WebsocketClient) Close() error {
 
 func (w *WebsocketClient) close() error {
 	close(w.done)
+
+	// Fail all pending WS post requests immediately.
+	w.failAllInflight(ErrWsNotConnected)
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -269,6 +413,9 @@ func (w *WebsocketClient) readPump(ctx context.Context) {
 			w.conn = nil
 		}
 		w.mu.Unlock()
+
+		// Fail all pending WS post requests so callers don't hang.
+		w.failAllInflight(ErrWsNotConnected)
 
 		if shouldReconnect {
 			w.reconnect(ctx)
@@ -350,6 +497,13 @@ func (w *WebsocketClient) ForceReconnect(ctx context.Context) {
 }
 
 func (w *WebsocketClient) dispatch(msg wsMessage) error {
+	// WS post responses arrive on channel "post" — they are correlated by ID,
+	// not dispatched through the subscription registry.
+	if msg.Channel == "post" {
+		w.dispatchPostResponse(msg.Data)
+		return nil
+	}
+
 	dispatcher, ok := w.msgDispatcherRegistry[msg.Channel]
 	if !ok {
 		return fmt.Errorf("no dispatcher for channel: %s", msg.Channel)
