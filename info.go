@@ -264,6 +264,22 @@ func (i *Info) RegisterCoin(coin string, asset, szDecimals int) {
 	i.assetToDecimal[asset] = szDecimals
 }
 
+// LookupAsset returns the coin name for an asset index, if registered.
+func (i *Info) LookupAsset(asset int) (string, bool) {
+	name, ok := i.assetToCoin[asset]
+	return name, ok
+}
+
+// UnregisterAsset removes an asset index mapping. Used when multiple dexes
+// claim the same index — better to leave it unresolved than guess wrong.
+func (i *Info) UnregisterAsset(asset int) {
+	if name, ok := i.assetToCoin[asset]; ok {
+		delete(i.coinToAsset, name)
+		delete(i.assetToCoin, asset)
+		delete(i.assetToDecimal, asset)
+	}
+}
+
 // ResolveCoin translates an asset-index symbol like "@107" to its coin name
 // (e.g. "ALT"). If the input doesn't start with "@" or the index is unknown,
 // the original string is returned unchanged.
