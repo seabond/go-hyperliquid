@@ -27,13 +27,10 @@ func keyL2Book(coin string) string {
 }
 
 func keyAllMids(_ fp.Option[string]) string {
-	// Unfortunately, "dex" parameter is not returned neither in subscription ACK nor in the
-	// allMids message, no we are rendered unable to distinguish between different DEXes from
-	// subscriber's standpoint.
-	// if dex.IsNone() {
-	// 	return key(ChannelAllMids)
-	// }
-	// return key(ChannelAllMids, dex.UnwrapUnsafe())
+	// The server does not include "dex" in allMids push messages, so the client
+	// cannot distinguish builder-dex snapshots from the main perp snapshot.
+	// All allMids subscriptions share the same key. Builder dex prices are
+	// fetched via REST polling instead (see market.Prices.pollDexes).
 	return key(ChannelAllMids)
 }
 
