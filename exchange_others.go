@@ -623,6 +623,66 @@ func (e *Exchange) SpotTransfer(
 	return &result, nil
 }
 
+// SendAsset transfers tokens between users/dexes. Works with unified account.
+// sourceDex/destinationDex: "" for default perp dex, "spot" for spot.
+// token: e.g. "USDC" — must match collateral token when transferring to/from perp dex.
+func (e *Exchange) SendAsset(
+	ctx context.Context,
+	destination, sourceDex, destinationDex, token string,
+	amount float64,
+) (*TransferResponse, error) {
+	nonce := e.nextNonce()
+
+	fromSubAccount := e.vault
+	if fromSubAccount == "" {
+		fromSubAccount = ""
+	}
+
+	action := map[string]any{
+		"type":           "sendAsset",
+		"destination":    destination,
+		"sourceDex":      sourceDex,
+		"destinationDex": destinationDex,
+		"token":          token,
+		"amount":         formatFloat(amount),
+		"fromSubAccount": fromSubAccount,
+		"nonce":          big.NewInt(nonce),
+	}
+
+	payloadTypes := []apitypes.Type{
+		{Name: "hyperliquidChain", Type: "string"},
+		{Name: "destination", Type: "string"},
+		{Name: "sourceDex", Type: "string"},
+		{Name: "destinationDex", Type: "string"},
+		{Name: "token", Type: "string"},
+		{Name: "amount", Type: "string"},
+		{Name: "fromSubAccount", Type: "string"},
+		{Name: "nonce", Type: "uint64"},
+	}
+
+	sig, err := e.signUserSignedAction(
+		ctx,
+		action,
+		payloadTypes,
+		"HyperliquidTransaction:SendAsset",
+		e.client.baseURL == MainnetAPIURL,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := e.postAction(ctx, action, sig, nonce)
+	if err != nil {
+		return nil, err
+	}
+
+	var result TransferResponse
+	if err := jUnmarshal(resp, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // UseBigBlocks enables or disables big blocks
 func (e *Exchange) UseBigBlocks(ctx context.Context, enable bool) (*ApprovalResponse, error) {
 	nonce := e.nextNonce()
