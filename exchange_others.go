@@ -49,11 +49,13 @@ func (e *Exchange) UpdateIsolatedMargin(
 		return nil, fmt.Errorf("coin %s not found in info", name)
 	}
 
+	// Convert USD amount to raw units (6 decimals: 1 USDC = 1_000_000).
+	rawAmount := int64(abs(amount) * 1_000_000)
 	action := UpdateIsolatedMarginAction{
 		Type:  "updateIsolatedMargin",
 		Asset: asset,
 		IsBuy: amount > 0,
-		Ntli:  abs(amount),
+		Ntli:  rawAmount,
 	}
 
 	var result UserState
