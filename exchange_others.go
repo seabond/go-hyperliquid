@@ -50,7 +50,8 @@ func (e *Exchange) UpdateIsolatedMargin(
 	}
 
 	// Convert USD amount to raw units (6 decimals: 1 USDC = 1_000_000).
-	rawAmount := int64(abs(amount) * 1_000_000)
+	// Positive = add margin, negative = remove margin.
+	rawAmount := int64(amount * 1_000_000)
 	action := UpdateIsolatedMarginAction{
 		Type:  "updateIsolatedMargin",
 		Asset: asset,
