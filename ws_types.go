@@ -25,6 +25,7 @@ const (
 	ChannelWebData3                      string = "webData3"
 	ChannelAllDexsClearinghouseState     string = "allDexsClearinghouseState"
 	ChannelSpotState                    string = "spotState"
+	ChannelAllDexsAssetCtxs             string = "allDexsAssetCtxs"
 )
 
 type wsMessage struct {
@@ -290,6 +291,14 @@ type (
 		User      string        `json:"user"`
 		SpotState SpotUserState `json:"spotState"`
 	}
+
+	// AllDexsAssetCtxs is the response for the allDexsAssetCtxs channel.
+	// Hyperliquid serializes this as an array of [dexName, [ActiveAssetCtx...]]
+	// tuples — one entry per dex.
+	//easyjson:skip
+	AllDexsAssetCtxs struct {
+		Dexes DexAssetCtxsMap
+	}
 )
 
 // DexStatesMap maps dex name to ClearinghouseState.
@@ -314,6 +323,38 @@ func (m *DexStatesMap) UnmarshalJSON(data []byte) error {
 		(*m)[key] = state
 	}
 	return nil
+}
+
+// DexAssetCtxsMap maps dex name to a slice of ActiveAssetCtx.
+// Hyperliquid serializes this as an array of [key, value] tuples.
+type DexAssetCtxsMap map[string][]ActiveAssetCtx
+
+func (m *DexAssetCtxsMap) UnmarshalJSON(data []byte) error {
+	var tuples [][2]json.RawMessage
+	if err := json.Unmarshal(data, &tuples); err != nil {
+		return err
+	}
+	*m = make(DexAssetCtxsMap, len(tuples))
+	for _, t := range tuples {
+		var key string
+		if err := json.Unmarshal(t[0], &key); err != nil {
+			return err
+		}
+		var ctxs []ActiveAssetCtx
+		if err := json.Unmarshal(t[1], &ctxs); err != nil {
+			return err
+		}
+		(*m)[key] = ctxs
+	}
+	return nil
+}
+
+func (a AllDexsAssetCtxs) Key() string {
+	return key(ChannelAllDexsAssetCtxs)
+}
+
+func (a *AllDexsAssetCtxs) UnmarshalJSON(data []byte) error {
+	return a.Dexes.UnmarshalJSON(data)
 }
 
 var (

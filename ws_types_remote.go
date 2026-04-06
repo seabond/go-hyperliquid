@@ -208,6 +208,18 @@ func (p remoteAllDexsClearinghouseStateSubscriptionPayload) Key() string {
 	return keyAllDexsClearinghouseState(p.User)
 }
 
+type remoteAllDexsAssetCtxsSubscriptionPayload struct {
+	Type string `json:"type"`
+}
+
+func (p remoteAllDexsAssetCtxsSubscriptionPayload) Channel() string {
+	return p.Type
+}
+
+func (p remoteAllDexsAssetCtxsSubscriptionPayload) Key() string {
+	return keyAllDexsAssetCtxs()
+}
+
 //easyjson:skip
 type remoteSpotStateSubscriptionPayload struct {
 	Type string `json:"type"`
