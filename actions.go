@@ -106,12 +106,13 @@ type UpdateLeverageAction struct {
 	Leverage int    `json:"leverage" msgpack:"leverage"`
 }
 
-// UpdateIsolatedMarginAction represents isolated margin update
+// UpdateIsolatedMarginAction represents isolated margin update.
+// Ntli is in raw units with 6 decimals (1 USDC = 1_000_000).
 type UpdateIsolatedMarginAction struct {
-	Type  string  `json:"type"  msgpack:"type"`
-	Asset int     `json:"asset" msgpack:"asset"`
-	IsBuy bool    `json:"isBuy" msgpack:"isBuy"`
-	Ntli  float64 `json:"ntli"  msgpack:"ntli"`
+	Type  string `json:"type"  msgpack:"type"`
+	Asset int    `json:"asset" msgpack:"asset"`
+	IsBuy bool   `json:"isBuy" msgpack:"isBuy"`
+	Ntli  int64  `json:"ntli"  msgpack:"ntli"`
 }
 
 // OrderWire represents the wire format for orders with deterministic field ordering
