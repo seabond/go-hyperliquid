@@ -293,8 +293,9 @@ type (
 	}
 
 	// AllDexsAssetCtxs is the response for the allDexsAssetCtxs channel.
-	// Hyperliquid serializes this as an array of [dexName, [ActiveAssetCtx...]]
-	// tuples — one entry per dex.
+	// HL format: {"ctxs": [["dexName", [SharedAssetCtx...]], ...]}.
+	// Custom UnmarshalJSON because jsoniter doesn't correctly delegate to
+	// DexAssetCtxsMap.UnmarshalJSON when nested inside a struct.
 	//easyjson:skip
 	AllDexsAssetCtxs struct {
 		Dexes DexAssetCtxsMap
@@ -325,23 +326,30 @@ func (m *DexStatesMap) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// DexAssetCtxsMap maps dex name to a slice of ActiveAssetCtx.
-// Hyperliquid serializes this as an array of [key, value] tuples.
-type DexAssetCtxsMap map[string][]ActiveAssetCtx
+// DexAssetCtxsMap maps dex name to a slice of SharedAssetCtx.
+// Hyperliquid serializes Record<string, T[]> as [[key, values], ...] tuples.
+// Each ctx does NOT contain a coin field; the caller must correlate by index
+// against the meta universe for each dex.
+type DexAssetCtxsMap map[string][]SharedAssetCtx
 
 func (m *DexAssetCtxsMap) UnmarshalJSON(data []byte) error {
-	var tuples [][2]json.RawMessage
+	var tuples []json.RawMessage
 	if err := json.Unmarshal(data, &tuples); err != nil {
 		return err
 	}
 	*m = make(DexAssetCtxsMap, len(tuples))
-	for _, t := range tuples {
-		var key string
-		if err := json.Unmarshal(t[0], &key); err != nil {
+	for _, raw := range tuples {
+		// Each tuple is [string, [...ctxs]].
+		var pair [2]json.RawMessage
+		if err := json.Unmarshal(raw, &pair); err != nil {
 			return err
 		}
-		var ctxs []ActiveAssetCtx
-		if err := json.Unmarshal(t[1], &ctxs); err != nil {
+		var key string
+		if err := json.Unmarshal(pair[0], &key); err != nil {
+			return err
+		}
+		var ctxs []SharedAssetCtx
+		if err := json.Unmarshal(pair[1], &ctxs); err != nil {
 			return err
 		}
 		(*m)[key] = ctxs
@@ -349,13 +357,21 @@ func (m *DexAssetCtxsMap) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (a *AllDexsAssetCtxs) UnmarshalJSON(data []byte) error {
+	var wrapper struct {
+		Ctxs DexAssetCtxsMap `json:"ctxs"`
+	}
+	if err := json.Unmarshal(data, &wrapper); err != nil {
+		return err
+	}
+	a.Dexes = wrapper.Ctxs
+	return nil
+}
+
 func (a AllDexsAssetCtxs) Key() string {
 	return key(ChannelAllDexsAssetCtxs)
 }
 
-func (a *AllDexsAssetCtxs) UnmarshalJSON(data []byte) error {
-	return a.Dexes.UnmarshalJSON(data)
-}
 
 var (
 	candleNoop = Candle{}
