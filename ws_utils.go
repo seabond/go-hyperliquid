@@ -98,3 +98,7 @@ func keyAllDexsClearinghouseState(user string) string {
 func keySpotState(user string) string {
 	return key(ChannelSpotState, user)
 }
+
+func keyAllDexsAssetCtxs() string {
+	return key(ChannelAllDexsAssetCtxs)
+}
