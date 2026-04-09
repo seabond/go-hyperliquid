@@ -982,9 +982,23 @@ func (e *Exchange) ApproveBuilderFee(
 		return nil, err
 	}
 
+	// Check for API-level error first. Hyperliquid returns errors as
+	// {"status":"err","response":"message"} where "response" is a string.
+	var errCheck struct {
+		Status   string `json:"status"`
+		Response string `json:"response"`
+	}
+	if jUnmarshal(resp, &errCheck) == nil && errCheck.Status == "err" {
+		msg := errCheck.Response
+		if msg == "" {
+			msg = "unknown error"
+		}
+		return nil, fmt.Errorf("%s", msg)
+	}
+
 	var result ApprovalResponse
 	if err := jUnmarshal(resp, &result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("approve builder fee unmarshal failed (raw: %s): %w", string(resp), err)
 	}
 	return &result, nil
 }
