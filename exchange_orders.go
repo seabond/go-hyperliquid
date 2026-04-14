@@ -207,6 +207,44 @@ func (e *Exchange) BulkOrders(
 	}, nil
 }
 
+// BulkOrdersPartial is like BulkOrders but does NOT abort on per-order errors.
+// Instead, it returns all statuses including ones with Error set, letting the
+// caller decide how to handle each individual result. This is essential for
+// batch close/reduce operations where one order's failure should not prevent
+// processing the results of other orders in the same batch.
+func (e *Exchange) BulkOrdersPartial(
+	ctx context.Context,
+	grouping Grouping,
+	orders []CreateOrderRequest,
+	builder *BuilderInfo,
+) ([]OrderStatus, error) {
+	action, err := newCreateOrderAction(e, grouping, orders, builder)
+	if err != nil {
+		return nil, err
+	}
+
+	var mixedResult *APIResponse[OrderResponseMixed]
+	if err = e.executeAction(ctx, action, &mixedResult); err != nil {
+		return nil, err
+	}
+
+	statuses := make([]OrderStatus, 0, len(mixedResult.Data.Statuses))
+	for _, s := range mixedResult.Data.Statuses {
+		switch {
+		case s.Type() == "string" && s.MustString() == "waitingForTrigger":
+			statuses = append(statuses, OrderStatus{WaitingForTrigger: true})
+		case s.Type() == "object":
+			var st OrderStatus
+			if err = s.Parse(&st); err != nil {
+				return nil, err
+			}
+			statuses = append(statuses, st) // no abort on st.Error != nil
+		}
+	}
+
+	return statuses, nil
+}
+
 // ModifyOrderRequest identifies an order by either exchange-provided Oid or client-provided Cloid.
 // Exactly one of Oid or Cloid must be non-nil.
 type ModifyOrderRequest struct {
