@@ -522,6 +522,16 @@ func easyjson8df87204DecodeGithubComSoniricoGoHyperliquid4(in *jlexer.Lexer, out
 					*out.BuilderFee = string(in.String())
 				}
 			}
+		case "cloid":
+			if in.IsNull() {
+				in.Skip()
+				out.Cloid = nil
+			} else {
+				if out.Cloid == nil {
+					out.Cloid = new(string)
+				}
+				*out.Cloid = string(in.String())
+			}
 		default:
 			in.SkipRecursive()
 		}
