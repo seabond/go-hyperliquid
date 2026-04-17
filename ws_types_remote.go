@@ -99,9 +99,15 @@ func (p remoteOrderUpdatesSubscriptionPayload) Key() string {
 	return keyOrderUpdates(p.User)
 }
 
+// remoteOrderFillsSubscriptionPayload carries the optional aggregateByTime
+// flag; easyjson can't express pointer-omitempty for bools cleanly, so this
+// type opts out of easyjson and uses stdlib json (via jMarshal) instead.
+//
+//easyjson:skip
 type remoteOrderFillsSubscriptionPayload struct {
-	Type string `json:"type"`
-	User string `json:"user"`
+	Type             string `json:"type"`
+	User             string `json:"user"`
+	AggregateByTime  *bool  `json:"aggregateByTime,omitempty"`
 }
 
 func (p remoteOrderFillsSubscriptionPayload) Channel() string {

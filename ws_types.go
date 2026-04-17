@@ -308,17 +308,17 @@ type DexStatesMap map[string]ClearinghouseState
 
 func (m *DexStatesMap) UnmarshalJSON(data []byte) error {
 	var tuples [][2]json.RawMessage
-	if err := json.Unmarshal(data, &tuples); err != nil {
+	if err := jUnmarshal(data, &tuples); err != nil {
 		return err
 	}
 	*m = make(DexStatesMap, len(tuples))
 	for _, t := range tuples {
 		var key string
-		if err := json.Unmarshal(t[0], &key); err != nil {
+		if err := jUnmarshal(t[0], &key); err != nil {
 			return err
 		}
 		var state ClearinghouseState
-		if err := json.Unmarshal(t[1], &state); err != nil {
+		if err := jUnmarshal(t[1], &state); err != nil {
 			return err
 		}
 		(*m)[key] = state
@@ -334,22 +334,22 @@ type DexAssetCtxsMap map[string][]SharedAssetCtx
 
 func (m *DexAssetCtxsMap) UnmarshalJSON(data []byte) error {
 	var tuples []json.RawMessage
-	if err := json.Unmarshal(data, &tuples); err != nil {
+	if err := jUnmarshal(data, &tuples); err != nil {
 		return err
 	}
 	*m = make(DexAssetCtxsMap, len(tuples))
 	for _, raw := range tuples {
 		// Each tuple is [string, [...ctxs]].
 		var pair [2]json.RawMessage
-		if err := json.Unmarshal(raw, &pair); err != nil {
+		if err := jUnmarshal(raw, &pair); err != nil {
 			return err
 		}
 		var key string
-		if err := json.Unmarshal(pair[0], &key); err != nil {
+		if err := jUnmarshal(pair[0], &key); err != nil {
 			return err
 		}
 		var ctxs []SharedAssetCtx
-		if err := json.Unmarshal(pair[1], &ctxs); err != nil {
+		if err := jUnmarshal(pair[1], &ctxs); err != nil {
 			return err
 		}
 		(*m)[key] = ctxs
@@ -361,7 +361,7 @@ func (a *AllDexsAssetCtxs) UnmarshalJSON(data []byte) error {
 	var wrapper struct {
 		Ctxs DexAssetCtxsMap `json:"ctxs"`
 	}
-	if err := json.Unmarshal(data, &wrapper); err != nil {
+	if err := jUnmarshal(data, &wrapper); err != nil {
 		return err
 	}
 	a.Dexes = wrapper.Ctxs

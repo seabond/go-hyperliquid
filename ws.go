@@ -48,6 +48,11 @@ type postResponse struct {
 // maxPostInflight is the Hyperliquid WS post concurrency limit.
 const maxPostInflight = 100
 
+// rawInboxSize is the buffer between readPump and decodePump. Sized for ~50s
+// of burst traffic at 20 msg/s per connection, so a slow callback cannot
+// backpressure network reads in steady state.
+const rawInboxSize = 1024
+
 type Subscription struct {
 	ID      string
 	Payload any
@@ -77,6 +82,13 @@ type WebsocketClient struct {
 	postIDCounter atomic.Int64            // monotonically increasing request ID
 	postInflight  sync.Map                // id (int64) -> chan postResponse
 	postSem       chan struct{}            // counting semaphore, cap = maxPostInflight
+
+	// rawInbox decouples network reads from decode/dispatch. readPump pushes
+	// raw message bytes; decodePump drains, unmarshals, and fans out to
+	// subscribers. A slow callback on one subscription no longer blocks
+	// ws reads for the whole connection.
+	rawInbox       chan []byte
+	decodePumpOnce sync.Once
 }
 
 var upstreamHosts map[string]struct{}
@@ -136,6 +148,7 @@ func NewWebsocketClient(baseURL string, opts ...WsOpt) *WebsocketClient {
 		readTimeout:   wsReadTimeout,
 		pingEvery:     pingInterval,
 		postSem:       make(chan struct{}, maxPostInflight),
+		rawInbox:      make(chan []byte, rawInboxSize),
 		subscribers:   make(map[string]*uniqSubscriber),
 		msgDispatcherRegistry: map[string]msgDispatcher{
 			ChannelPong:           NewPongDispatcher(),
@@ -194,6 +207,10 @@ func (w *WebsocketClient) Connect(ctx context.Context) error {
 	hook := w.onConnect
 	reconnected := w.hasConnected
 	w.hasConnected = true
+
+	// decodePump is client-scoped (persists across reconnects); readPump and
+	// pingPump are connection-scoped and restart on each Connect.
+	w.decodePumpOnce.Do(func() { go w.decodePump() })
 
 	go w.readPump(ctx)
 	go w.pingPump(ctx)
@@ -453,12 +470,35 @@ func (w *WebsocketClient) readPump(ctx context.Context) {
 				w.logDebugf("[<] %s", string(msg))
 			}
 
+			// Hand off to decodePump. Block if the inbox is full: applying
+			// backpressure to the TCP stream is safer than dropping messages.
+			select {
+			case w.rawInbox <- msg:
+			case <-ctx.Done():
+				return
+			case <-w.done:
+				return
+			}
+		}
+	}
+}
+
+// decodePump is the single consumer of rawInbox. It runs for the lifetime
+// of the client (started once via decodePumpOnce) and survives reconnects.
+func (w *WebsocketClient) decodePump() {
+	for {
+		select {
+		case <-w.done:
+			return
+		case raw, ok := <-w.rawInbox:
+			if !ok {
+				return
+			}
 			var wsMsg wsMessage
-			if err := jUnmarshal(msg, &wsMsg); err != nil {
+			if err := jUnmarshal(raw, &wsMsg); err != nil {
 				w.logErrf("websocket message parse error: %v", err)
 				continue
 			}
-
 			if err := w.dispatch(wsMsg); err != nil {
 				w.logErrf("failed to dispatch websocket message: %v", err)
 			}
