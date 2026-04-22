@@ -91,7 +91,12 @@ func (e *Exchange) SlippagePrice(
 		}
 	}
 
-	asset, ok := e.info.coinToAsset[name]
+	// Single Load so the (asset, szDecimals) pair comes from the same
+	// snapshot — avoids a TOCTOU window where a concurrent RegisterCoin
+	// could make coinToAsset[name] resolve against a newer snapshot than
+	// assetToDecimal[asset].
+	snap := e.info.coins.Load()
+	asset, ok := snap.coinToAsset[name]
 	if !ok {
 		return 0, fmt.Errorf("coin %q not found in asset map", name)
 	}
@@ -112,7 +117,7 @@ func (e *Exchange) SlippagePrice(
 	if isSpot {
 		decimals = 8
 	}
-	szDecimals, ok := e.info.assetToDecimal[asset]
+	szDecimals, ok := snap.assetToDecimal[asset]
 	if !ok {
 		return 0, fmt.Errorf("asset %d not found in decimal map", asset)
 	}

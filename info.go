@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"context"
 	"fmt"
+	"sync"
+	"sync/atomic"
 )
 
 const (
@@ -14,14 +16,50 @@ const (
 	builderPerpAssetBase = 100000
 )
 
-type Info struct {
-	debug          bool
-	client         *client
+// coinSnap is the immutable lookup table for coin ↔ asset ↔ szDecimals,
+// published via Info.coins with atomic.Pointer. Readers take one Load and
+// do all their lookups from the same snapshot so a concurrent RegisterCoin
+// cannot split a (coin, asset, szDecimals) triple across two lookups.
+// Never mutate after Store — always clone + Store a new snapshot.
+type coinSnap struct {
 	coinToAsset    map[string]int
 	assetToCoin    map[int]string
 	assetToDecimal map[int]int
-	perpDexName    string
-	clientOpts     []ClientOpt
+}
+
+func newCoinSnap() *coinSnap {
+	return &coinSnap{
+		coinToAsset:    make(map[string]int),
+		assetToCoin:    make(map[int]string),
+		assetToDecimal: make(map[int]int),
+	}
+}
+
+func (s *coinSnap) clone() *coinSnap {
+	out := &coinSnap{
+		coinToAsset:    make(map[string]int, len(s.coinToAsset)+1),
+		assetToCoin:    make(map[int]string, len(s.assetToCoin)+1),
+		assetToDecimal: make(map[int]int, len(s.assetToDecimal)+1),
+	}
+	for k, v := range s.coinToAsset {
+		out.coinToAsset[k] = v
+	}
+	for k, v := range s.assetToCoin {
+		out.assetToCoin[k] = v
+	}
+	for k, v := range s.assetToDecimal {
+		out.assetToDecimal[k] = v
+	}
+	return out
+}
+
+type Info struct {
+	debug        bool
+	client       *client
+	coins        atomic.Pointer[coinSnap] // coin/asset/szDecimals lookups, copy-on-write
+	coinsWriteMu sync.Mutex               // serialize writers so Load→clone→Store is not lossy
+	perpDexName  string
+	clientOpts   []ClientOpt
 }
 
 func NewInfo(
@@ -33,11 +71,10 @@ func NewInfo(
 	perpDexs *MixedArray,
 	opts ...InfoOpt,
 ) (*Info, error) {
-	info := &Info{
-		coinToAsset:    make(map[string]int),
-		assetToCoin:    make(map[int]string),
-		assetToDecimal: make(map[int]int),
-	}
+	info := &Info{}
+	// Seed an empty snapshot so Load never returns nil even if NewInfo bails
+	// out before the final Store (e.g. meta fetch fails).
+	info.coins.Store(newCoinSnap())
 
 	for _, opt := range opts {
 		opt.Apply(info)
@@ -64,6 +101,12 @@ func NewInfo(
 			return nil, err
 		}
 	}
+
+	// Build the snapshot on a throwaway struct (single-threaded init) and
+	// publish once at the end. Callers that hit CoinToAsset before NewInfo
+	// returns would see the empty seed — acceptable since Info isn't reachable
+	// yet anyway.
+	snap := newCoinSnap()
 
 	// Map perp assets
 	if info.perpDexName != "" {
@@ -93,16 +136,16 @@ func NewInfo(
 		base := builderPerpAssetBase + perpDexIndex*10000
 		for idxInMeta, assetInfo := range meta.Universe {
 			assetID := base + idxInMeta
-			info.coinToAsset[assetInfo.Name] = assetID
-			info.assetToCoin[assetID] = assetInfo.Name
-			info.assetToDecimal[assetID] = assetInfo.SzDecimals
+			snap.coinToAsset[assetInfo.Name] = assetID
+			snap.assetToCoin[assetID] = assetInfo.Name
+			snap.assetToDecimal[assetID] = assetInfo.SzDecimals
 		}
 	} else {
 		// Default perp dex: asset id is just index in meta universe.
 		for asset, assetInfo := range meta.Universe {
-			info.coinToAsset[assetInfo.Name] = asset
-			info.assetToCoin[asset] = assetInfo.Name
-			info.assetToDecimal[asset] = assetInfo.SzDecimals
+			snap.coinToAsset[assetInfo.Name] = asset
+			snap.assetToCoin[asset] = assetInfo.Name
+			snap.assetToDecimal[asset] = assetInfo.SzDecimals
 		}
 	}
 
@@ -116,14 +159,15 @@ func NewInfo(
 	// Map spot assets starting at 10000
 	for _, spotInfo := range spotMeta.Universe {
 		asset := spotInfo.Index + spotAssetIndexOffset
-		info.coinToAsset[spotInfo.Name] = asset
+		snap.coinToAsset[spotInfo.Name] = asset
 		if len(spotInfo.Tokens) > 0 {
 			if tokenInfo, ok := tokensByIndex[spotInfo.Tokens[0]]; ok {
-				info.assetToDecimal[asset] = tokenInfo.SzDecimals
+				snap.assetToDecimal[asset] = tokenInfo.SzDecimals
 			}
 		}
 	}
 
+	info.coins.Store(snap)
 	return info, nil
 }
 
@@ -262,33 +306,55 @@ func (i *Info) SpotMeta(ctx context.Context) (*SpotMeta, error) {
 }
 
 func (i *Info) CoinToAsset(coin string) (int, bool) {
-	result, ok := i.coinToAsset[coin]
+	s := i.coins.Load()
+	result, ok := s.coinToAsset[coin]
 	return result, ok
+}
+
+// AssetDecimals returns the szDecimals registered for an asset index, if any.
+func (i *Info) AssetDecimals(asset int) (int, bool) {
+	s := i.coins.Load()
+	sz, ok := s.assetToDecimal[asset]
+	return sz, ok
 }
 
 // RegisterCoin adds a coin → asset mapping. Used to register builder-deployed
 // perp assets that weren't loaded during NewInfo (which only loads the default
-// dex or a single named dex).
+// dex or a single named dex). Safe to call while readers are in flight —
+// publishes a new immutable snapshot atomically. coinsWriteMu serialises
+// concurrent writers so the Load→clone→Store path isn't lossy.
 func (i *Info) RegisterCoin(coin string, asset, szDecimals int) {
-	i.coinToAsset[coin] = asset
-	i.assetToCoin[asset] = coin
-	i.assetToDecimal[asset] = szDecimals
+	i.coinsWriteMu.Lock()
+	defer i.coinsWriteMu.Unlock()
+	next := i.coins.Load().clone()
+	next.coinToAsset[coin] = asset
+	next.assetToCoin[asset] = coin
+	next.assetToDecimal[asset] = szDecimals
+	i.coins.Store(next)
 }
 
 // LookupAsset returns the coin name for an asset index, if registered.
 func (i *Info) LookupAsset(asset int) (string, bool) {
-	name, ok := i.assetToCoin[asset]
+	s := i.coins.Load()
+	name, ok := s.assetToCoin[asset]
 	return name, ok
 }
 
 // UnregisterAsset removes an asset index mapping. Used when multiple dexes
 // claim the same index — better to leave it unresolved than guess wrong.
 func (i *Info) UnregisterAsset(asset int) {
-	if name, ok := i.assetToCoin[asset]; ok {
-		delete(i.coinToAsset, name)
-		delete(i.assetToCoin, asset)
-		delete(i.assetToDecimal, asset)
+	i.coinsWriteMu.Lock()
+	defer i.coinsWriteMu.Unlock()
+	cur := i.coins.Load()
+	name, ok := cur.assetToCoin[asset]
+	if !ok {
+		return
 	}
+	next := cur.clone()
+	delete(next.coinToAsset, name)
+	delete(next.assetToCoin, asset)
+	delete(next.assetToDecimal, asset)
+	i.coins.Store(next)
 }
 
 // ResolveCoin translates an asset-index symbol like "@107" to its coin name
@@ -305,7 +371,7 @@ func (i *Info) ResolveCoin(symbol string) string {
 		}
 		idx = idx*10 + int(c-'0')
 	}
-	if name, ok := i.assetToCoin[idx]; ok {
+	if name, ok := i.coins.Load().assetToCoin[idx]; ok {
 		return name
 	}
 	return symbol
