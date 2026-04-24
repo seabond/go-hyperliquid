@@ -330,6 +330,18 @@ func (w *WebsocketClient) Post(ctx context.Context, reqType string, payload any)
 	w.postInflight.Store(id, ch)
 	defer w.postInflight.Delete(id)
 
+	// 4a. Close the check→Store atomicity window: if readPump's defer fired
+	// between our step 1 conn-check and this Store, failAllInflight's
+	// sync.Map.Range snapshot may have happened before our Store and will
+	// never signal this id. Re-check w.conn here and bail early if nil so
+	// writeJSON doesn't block and the caller doesn't hang until ctx expires.
+	w.mu.RLock()
+	conn := w.conn
+	w.mu.RUnlock()
+	if conn == nil {
+		return nil, ErrWsNotConnected
+	}
+
 	// 5. Build and send the post message.
 	msg := map[string]any{
 		"method": "post",
@@ -430,12 +442,18 @@ func (w *WebsocketClient) close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if w.conn != nil {
-		return w.conn.Close()
-	}
-
+	// Clear subscribers first. Previous layout early-returned on
+	// `w.conn != nil` before the subscriber.clear loop, so the normal
+	// close path (conn live → Close succeeds → return) never ran the
+	// loop. Callback closures in w.subscribers stayed referenced by the
+	// client until it went out of scope — small leak, visible in heap
+	// profiles during deploy churn.
 	for _, subscriber := range w.subscribers {
 		subscriber.clear()
+	}
+
+	if w.conn != nil {
+		return w.conn.Close()
 	}
 	return nil
 }
