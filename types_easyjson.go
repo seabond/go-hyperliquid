@@ -1341,9 +1341,10 @@ func easyjson6601e8cdDecodeGithubComSoniricoGoHyperliquid12(in *jlexer.Lexer, ou
 		case "response":
 			if in.IsNull() {
 				in.Skip()
-				out.Response = nil
 			} else {
-				out.Response = in.Raw()
+				if data := in.Raw(); in.Ok() {
+					in.AddError((out.Response).UnmarshalJSON(data))
+				}
 			}
 		default:
 			in.SkipRecursive()
@@ -1373,6 +1374,11 @@ func easyjson6601e8cdEncodeGithubComSoniricoGoHyperliquid12(out *jwriter.Writer,
 		const prefix string = ",\"error\":"
 		out.RawString(prefix)
 		out.String(string(in.Error))
+	}
+	if len(in.Response) != 0 {
+		const prefix string = ",\"response\":"
+		out.RawString(prefix)
+		out.Raw((in.Response).MarshalJSON())
 	}
 	out.RawByte('}')
 }
@@ -9428,6 +9434,14 @@ func easyjson6601e8cdDecodeGithubComSoniricoGoHyperliquid81(in *jlexer.Lexer, ou
 			} else {
 				out.Error = string(in.String())
 			}
+		case "response":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				if data := in.Raw(); in.Ok() {
+					in.AddError((out.Response).UnmarshalJSON(data))
+				}
+			}
 		default:
 			in.SkipRecursive()
 		}
@@ -9456,6 +9470,11 @@ func easyjson6601e8cdEncodeGithubComSoniricoGoHyperliquid81(out *jwriter.Writer,
 		const prefix string = ",\"error\":"
 		out.RawString(prefix)
 		out.String(string(in.Error))
+	}
+	if len(in.Response) != 0 {
+		const prefix string = ",\"response\":"
+		out.RawString(prefix)
+		out.Raw((in.Response).MarshalJSON())
 	}
 	out.RawByte('}')
 }
