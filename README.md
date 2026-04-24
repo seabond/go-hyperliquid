@@ -387,7 +387,14 @@ make ci-test
 - [x] User account operations
 - [ ] Advanced order types
 - [ ] Historical data API
-- [ ] Connection pooling
+- [~] Connection pooling — handled at the consumer layer, not inside the
+      SDK. The fork's intended consumer (seabond/cte's `accountstate`
+      service) ships a fan-out pool in `internal/accountstate/pool/`
+      that wraps multiple `*WebsocketClient` instances across proxy IPs
+      to get past Hyperliquid's 10-unique-users-per-connection limit,
+      with FNV-pinned user→slot routing, grow/shrink, and lazy reopen.
+      SDK stays "one WS connection" and leaves policy (bucketing,
+      backoff, proxy-IP management) to the caller.
 
 ## License
 
