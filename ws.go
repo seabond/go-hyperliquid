@@ -489,6 +489,11 @@ func (w *WebsocketClient) readPump(ctx context.Context, conn *websocket.Conn) {
 				if !websocket.IsCloseError(err, websocket.CloseNormalClosure) {
 					w.logErrf("websocket read error: %v", err)
 				}
+				// Non-timeout errors (EOF / RST / peer close) bail out
+				// without setting shouldReconnect — pingPump.w.reconnect(ctx)
+				// on the next ticker is the safety net that brings the
+				// subscription back. Keep this in sync: if the pingPump
+				// reconnect ever moves, this branch must gain its own.
 				return
 			}
 
@@ -545,12 +550,18 @@ func (w *WebsocketClient) pingPump(ctx context.Context, conn *websocket.Conn) {
 		case <-ticker.C:
 			if err := w.writeConnJSON(conn, wsCommand{Method: "ping"}); err != nil {
 				w.logErrf("ping error: %v", err)
-				// Close *our* conn so readPump exits on its next read
-				// and runs the reconnect loop exactly once. Calling
-				// w.reconnect directly from here used to race with
-				// readPump's defer triggering a second concurrent
-				// reconnect (harmless but wasteful).
+				// Close *our* conn so readPump sees EOF next read and
+				// exits through its defer cleanly (and without touching
+				// the newer w.conn a racing reconnect may have put
+				// there — see the `if w.conn == conn` gate in
+				// readPump's defer). Then drive the reconnect here:
+				// readPump only sets shouldReconnect on a read *timeout*,
+				// so EOF / RST / peer-close would otherwise leave the
+				// subscriber permanently dataless. Connect is idempotent
+				// (early-returns on w.conn != nil) so even if readPump's
+				// defer also tries it the second call is a no-op.
 				_ = conn.Close()
+				w.reconnect(ctx)
 				return
 			}
 		}
