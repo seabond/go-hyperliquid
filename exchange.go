@@ -264,7 +264,7 @@ func (e *Exchange) postAction(
 	// WS post path: try first when available. Falls back to HTTP on any error
 	// (inflight full, not connected, WS write failure, etc.).
 	if e.ws != nil {
-		resp, err := e.ws.Post(ctx, "action", payload)
+		resp, err := e.ws.Post(ctx, PostTypeAction, payload)
 		if err == nil {
 			return []byte(resp), nil
 		}

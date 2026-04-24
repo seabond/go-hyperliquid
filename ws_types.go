@@ -38,6 +38,48 @@ type wsCommand struct {
 	Subscription any    `json:"subscription,omitempty"`
 }
 
+// PostType identifies the HL /exchange or /info request kind carried
+// inside a WS post envelope, and on the response side also marks an HL-
+// rejected request with the sentinel "error". Same string values HL uses
+// as the leading segment of the HTTP path.
+type PostType string
+
+const (
+	PostTypeAction PostType = "action" // signed exchange action (request or successful response)
+	PostTypeInfo   PostType = "info"   // read-only info query (request or successful response)
+	// PostTypeError appears only on the response side when HL rejects the
+	// post; clients never send it. Payload carries an error string.
+	PostTypeError PostType = "error"
+)
+
+// wsPostCommand is the outgoing wire envelope for a /exchange or /info
+// request routed through the websocket (vs HTTP). Matches HL's documented
+// {method:"post", id, request:{type, payload}} shape; sent by Post() and
+// correlated back to its waiter on the incoming side via ID.
+type wsPostCommand struct {
+	Method  string        `json:"method"` // always "post"
+	ID      int64         `json:"id"`
+	Request wsPostRequest `json:"request"`
+}
+
+type wsPostRequest struct {
+	Type    PostType `json:"type"`
+	Payload any      `json:"payload"` // request body (signed action or info query)
+}
+
+// wsPostResponse is the incoming reply envelope, dispatched on channel
+// "post" by dispatchPostResponse. ID correlates back to a Post() waiter in
+// postInflight.
+type wsPostResponse struct {
+	ID       int64              `json:"id"`
+	Response wsPostResponseBody `json:"response"`
+}
+
+type wsPostResponseBody struct {
+	Type    PostType        `json:"type"`
+	Payload json.RawMessage `json:"payload"` // success body or error string
+}
+
 type (
 	Trade struct {
 		Coin  string   `json:"coin"`

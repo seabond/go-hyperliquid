@@ -299,13 +299,14 @@ func (w *WebsocketClient) subscribe(
 }
 
 // Post sends a signed exchange (or info) request over the WebSocket and waits
-// for the correlated response. reqType is "action" or "info". payload is the
-// request body — the same map that would go to HTTP /exchange. The returned
-// json.RawMessage contains the response payload (identical to HTTP response body).
+// for the correlated response. reqType is PostTypeAction or PostTypeInfo.
+// payload is the request body — the same struct that would go to HTTP
+// /exchange. The returned json.RawMessage contains the response payload
+// (identical to HTTP response body).
 //
 // Returns ErrWsNotConnected if the WS connection is nil.
 // Returns ErrInflightFull if maxPostInflight requests are already in-flight.
-func (w *WebsocketClient) Post(ctx context.Context, reqType string, payload any) (json.RawMessage, error) {
+func (w *WebsocketClient) Post(ctx context.Context, reqType PostType, payload any) (json.RawMessage, error) {
 	// 1. Check connection.
 	w.mu.RLock()
 	connected := w.conn != nil
@@ -343,15 +344,15 @@ func (w *WebsocketClient) Post(ctx context.Context, reqType string, payload any)
 	}
 
 	// 5. Build and send the post message.
-	msg := map[string]any{
-		"method": "post",
-		"id":     id,
-		"request": map[string]any{
-			"type":    reqType,
-			"payload": payload,
+	cmd := wsPostCommand{
+		Method: "post",
+		ID:     id,
+		Request: wsPostRequest{
+			Type:    reqType,
+			Payload: payload,
 		},
 	}
-	if err := w.writeJSON(msg); err != nil {
+	if err := w.writeJSON(cmd); err != nil {
 		return nil, fmt.Errorf("ws post send: %w", err)
 	}
 
@@ -383,14 +384,7 @@ func (w *WebsocketClient) failAllInflight(err error) {
 // read pump. It extracts the request ID, looks up the corresponding inflight
 // channel, and delivers the result.
 func (w *WebsocketClient) dispatchPostResponse(raw json.RawMessage) {
-	// The data envelope: {"id": N, "response": {"type": "action"|"error", "payload": ...}}
-	var envelope struct {
-		ID       int64 `json:"id"`
-		Response struct {
-			Type    string          `json:"type"`
-			Payload json.RawMessage `json:"payload"`
-		} `json:"response"`
-	}
+	var envelope wsPostResponse
 	if err := jUnmarshal(raw, &envelope); err != nil {
 		w.logErrf("ws post: failed to parse response envelope: %v", err)
 		return
@@ -404,7 +398,7 @@ func (w *WebsocketClient) dispatchPostResponse(raw json.RawMessage) {
 	}
 	ch := val.(chan postResponse)
 
-	if envelope.Response.Type == "error" {
+	if envelope.Response.Type == PostTypeError {
 		// Error responses have a string payload like "400 Bad Request: ...".
 		var errMsg string
 		if err := jUnmarshal(envelope.Response.Payload, &errMsg); err != nil {
