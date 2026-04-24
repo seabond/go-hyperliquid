@@ -5,7 +5,6 @@ go 1.25.7
 require (
 	github.com/ethereum/go-ethereum v1.17.2
 	github.com/google/go-cmp v0.7.0
-	github.com/gorilla/websocket v1.5.3
 	github.com/joho/godotenv v1.5.1
 	github.com/json-iterator/go v1.1.12
 	github.com/lxzan/gws v1.9.1

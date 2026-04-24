@@ -8,9 +8,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/lxzan/gws"
 	"github.com/stretchr/testify/require"
 )
+
+// testServerDiscard ignores all inbound frames server-side. Used by the
+// timeout test to keep the TCP link alive (so TCP-level keepalives pass)
+// without sending any application-layer data back to the client.
+type testServerDiscard struct{ gws.BuiltinEventHandler }
+
+func (testServerDiscard) OnMessage(c *gws.Conn, m *gws.Message) { _ = m.Close() }
+
+// Override OnPing so the server does NOT reply with a Pong frame. The
+// client's readWatchdog fires on silence; an auto-pong would reset
+// lastReadNanos and defeat the test.
+func (testServerDiscard) OnPing(c *gws.Conn, payload []byte) {}
 
 func TestNewWebsocketClient(t *testing.T) {
 	require.PanicsWithValue(t,
@@ -40,29 +52,25 @@ func TestWsOptReadTimeout(t *testing.T) {
 // quietly), so the reconnect has to come from pingPump writing onto the
 // dead conn, failing, and calling w.reconnect(ctx).
 //
-// We shorten pingEvery to 100ms so the safety net fires within the 2s
-// wall clock the test is willing to wait. Regression guard: if pingPump
-// ever stops calling w.reconnect on write failure, a peer-initiated
-// close leaves the subscriber permanently dataless — exactly the prod
-// incident observed 2026-04-24 when the initial hardening pass moved
-// the reconnect out of pingPump without adding it to readPump.
+// Regression guard: if pingPump ever stops calling w.reconnect on write
+// failure, a peer-initiated close leaves the subscriber permanently
+// dataless — exactly the prod incident observed 2026-04-24 when the
+// initial hardening pass moved the reconnect out of pingPump without
+// adding it to readPump.
 func TestReadPumpReconnectsOnPeerClose(t *testing.T) {
-	upgrader := websocket.Upgrader{
-		CheckOrigin: func(*http.Request) bool { return true },
-	}
+	upgrader := gws.NewUpgrader(gws.BuiltinEventHandler{}, nil)
 	var connectCount atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
+		conn, err := upgrader.Upgrade(w, r)
 		if err != nil {
 			return
 		}
 		connectCount.Add(1)
 		// Send a clean close frame and drop the TCP conn. Mimics HL
 		// sending a 1000/1001 close and closing the socket.
-		_ = conn.WriteMessage(websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "bye"))
-		_ = conn.Close()
+		_ = conn.WriteClose(1000, []byte("bye"))
+		_ = conn.NetConn().Close()
 	}))
 	defer server.Close()
 
@@ -85,35 +93,30 @@ func TestReadPumpReconnectsOnPeerClose(t *testing.T) {
 }
 
 // TestReadPumpReconnectsOnTimeout spins up a WebSocket server that accepts
-// connections but never sends a message.  The client should time out and
-// reconnect, resulting in more than one TCP-level upgrade.
+// connections but never sends a message. The client's readWatchdog should
+// time out on silence, close the conn, and the readPump defer drives the
+// reconnect — yielding at least two upgrades in the 2s test window.
 func TestReadPumpReconnectsOnTimeout(t *testing.T) {
-	upgrader := websocket.Upgrader{
-		CheckOrigin: func(*http.Request) bool { return true },
-	}
+	upgrader := gws.NewUpgrader(testServerDiscard{}, nil)
 	var connectCount atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
+		conn, err := upgrader.Upgrade(w, r)
 		if err != nil {
 			return
 		}
 		connectCount.Add(1)
-		// Hold the connection open; drain any frames the client sends (e.g. ping)
-		// so the TCP link itself stays alive — only application-layer data is absent.
-		for {
-			if _, _, err := conn.ReadMessage(); err != nil {
-				_ = conn.Close()
-				return
-			}
-		}
+		// Block on ReadLoop to keep the TCP link alive and drain whatever
+		// the client writes (subscribes, pings). The discard handler sends
+		// nothing back, so the client's read-silence watchdog fires.
+		conn.ReadLoop()
 	}))
 	defer server.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	// 200 ms timeout gives us several reconnect cycles within the 3 s context.
+	// 200 ms timeout gives us several watchdog → reconnect cycles within 2s.
 	client := NewWebsocketClient(server.URL, WsOptReadTimeout(200*time.Millisecond))
 	require.NoError(t, client.Connect(ctx))
 
