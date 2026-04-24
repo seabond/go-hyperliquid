@@ -6,7 +6,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/lxzan/gws"
+	"golang.org/x/net/proxy"
 )
 
 // ProxyURL parses a proxy URL string and returns both a ClientOpt (for HTTP/REST)
@@ -51,13 +52,22 @@ func proxyClientOpt(proxyURL *url.URL) ClientOpt {
 	}
 }
 
-// proxyWsOpt returns a WsOpt that configures the WebSocket dialer to use
-// the given proxy.
+// proxyWsOpt returns a WsOpt that configures the WebSocket dialer to route
+// through the given proxy. Only socks5 is wired today — http/https proxies
+// need a net.Conn-returning helper, which gws does not yet provide out of
+// the box and is not currently required by any caller.
 func proxyWsOpt(proxyURL *url.URL) WsOpt {
 	return func(w *WebsocketClient) {
-		w.dialer = &websocket.Dialer{
-			HandshakeTimeout: 15 * time.Second,
-			Proxy:            http.ProxyURL(proxyURL),
+		w.newDialer = func() (gws.Dialer, error) {
+			var auth *proxy.Auth
+			if proxyURL.User != nil {
+				pw, _ := proxyURL.User.Password()
+				auth = &proxy.Auth{User: proxyURL.User.Username(), Password: pw}
+			}
+			return proxy.SOCKS5("tcp", proxyURL.Host, auth, &net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 60 * time.Second,
+			})
 		}
 	}
 }

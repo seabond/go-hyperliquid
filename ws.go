@@ -2,12 +2,12 @@ package hyperliquid
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"math/rand"
-	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/lxzan/gws"
 	"github.com/sonirico/vago/lol"
 	"github.com/sonirico/vago/maps"
 )
@@ -32,9 +32,9 @@ const (
 	// pingInterval is the interval for sending ping messages to keep WebSocket alive
 	pingInterval = 30 * time.Second
 
-	// wsReadTimeout is the default maximum duration to wait for a single read from
-	// the server before treating the connection as stalled. Must exceed pingInterval
-	// so that normal pong responses do not trigger a false timeout.
+	// wsReadTimeout is the default maximum duration to wait for a single read
+	// from the server before treating the connection as stalled. Must exceed
+	// pingInterval so that normal pong responses do not trigger a false timeout.
 	wsReadTimeout = 90 * time.Second
 )
 
@@ -57,9 +57,9 @@ type postResponse struct {
 // maxPostInflight is the Hyperliquid WS post concurrency limit.
 const maxPostInflight = 100
 
-// rawInboxSize is the buffer between readPump and decodePump. Sized for ~50s
-// of burst traffic at 20 msg/s per connection, so a slow callback cannot
-// backpressure network reads in steady state.
+// rawInboxSize is the buffer between the gws OnMessage handler and
+// decodePump. Sized for ~50s of burst traffic at 20 msg/s per connection,
+// so a slow callback cannot backpressure network reads in steady state.
 const rawInboxSize = 1024
 
 type Subscription struct {
@@ -70,8 +70,9 @@ type Subscription struct {
 
 type WebsocketClient struct {
 	url                   string
-	conn                  *websocket.Conn
-	dialer                *websocket.Dialer
+	conn                  *gws.Conn
+	newDialer             func() (gws.Dialer, error) // optional proxy dialer factory
+	tlsConfig             *tls.Config                // optional TLS config (nil → system defaults)
 	mu                    sync.RWMutex
 	writeMu               sync.Mutex
 	subscribers           map[string]*uniqSubscriber
@@ -88,14 +89,14 @@ type WebsocketClient struct {
 	hasConnected          bool
 
 	// WS post support: send exchange/info actions over WS instead of HTTP.
-	postIDCounter atomic.Int64            // monotonically increasing request ID
-	postInflight  sync.Map                // id (int64) -> chan postResponse
-	postSem       chan struct{}            // counting semaphore, cap = maxPostInflight
+	postIDCounter atomic.Int64 // monotonically increasing request ID
+	postInflight  sync.Map     // id (int64) -> chan postResponse
+	postSem       chan struct{} // counting semaphore, cap = maxPostInflight
 
-	// rawInbox decouples network reads from decode/dispatch. readPump pushes
-	// raw message bytes; decodePump drains, unmarshals, and fans out to
-	// subscribers. A slow callback on one subscription no longer blocks
-	// ws reads for the whole connection.
+	// rawInbox decouples network reads from decode/dispatch. The gws
+	// OnMessage handler pushes raw message bytes; decodePump drains,
+	// unmarshals, and fans out to subscribers. A slow callback on one
+	// subscription no longer blocks ws reads for the whole connection.
 	rawInbox       chan []byte
 	decodePumpOnce sync.Once
 }
@@ -175,12 +176,12 @@ func NewWebsocketClient(baseURL string, opts ...WsOpt) *WebsocketClient {
 			ChannelClearinghouseState: NewMsgDispatcher[ClearinghouseStateMessage](
 				ChannelClearinghouseState,
 			),
-			ChannelOpenOrders: NewMsgDispatcher[OpenOrders](ChannelOpenOrders),
-			ChannelTwapStates: NewMsgDispatcher[TwapStates](ChannelTwapStates),
-			ChannelWebData3:                      NewMsgDispatcher[WebData3](ChannelWebData3),
-			ChannelAllDexsClearinghouseState:     NewMsgDispatcher[AllDexsClearinghouseState](ChannelAllDexsClearinghouseState),
-			ChannelSpotState:                    NewMsgDispatcher[SpotStateMessage](ChannelSpotState),
-			ChannelAllDexsAssetCtxs:             NewMsgDispatcher[AllDexsAssetCtxs](ChannelAllDexsAssetCtxs),
+			ChannelOpenOrders:                NewMsgDispatcher[OpenOrders](ChannelOpenOrders),
+			ChannelTwapStates:                NewMsgDispatcher[TwapStates](ChannelTwapStates),
+			ChannelWebData3:                  NewMsgDispatcher[WebData3](ChannelWebData3),
+			ChannelAllDexsClearinghouseState: NewMsgDispatcher[AllDexsClearinghouseState](ChannelAllDexsClearinghouseState),
+			ChannelSpotState:                 NewMsgDispatcher[SpotStateMessage](ChannelSpotState),
+			ChannelAllDexsAssetCtxs:          NewMsgDispatcher[AllDexsAssetCtxs](ChannelAllDexsAssetCtxs),
 		},
 	}
 
@@ -191,6 +192,70 @@ func NewWebsocketClient(baseURL string, opts ...WsOpt) *WebsocketClient {
 	return cli
 }
 
+// eventHandler implements gws.Event. One handler is created per Connect
+// cycle and bound to the pumps for that conn generation. Its OnClose
+// flags shouldReconnect so the readPump goroutine can drive the
+// reconnect loop after ReadLoop returns. lastReadNanos is updated on
+// every inbound frame so the watchdog can detect silent connections.
+type eventHandler struct {
+	w               *WebsocketClient
+	shouldReconnect atomic.Bool
+	lastReadNanos   atomic.Int64
+}
+
+func (h *eventHandler) touchRead() {
+	h.lastReadNanos.Store(time.Now().UnixNano())
+}
+
+func (h *eventHandler) OnOpen(c *gws.Conn) {
+	// Seed the watchdog clock so it doesn't fire on the first tick if
+	// the initial subscribe ack takes a beat to arrive.
+	h.touchRead()
+}
+
+func (h *eventHandler) OnClose(c *gws.Conn, err error) {
+	// Any close means this conn is dead. Gate the reconnect on w.done so
+	// an explicit Close() doesn't trigger an infinite reconnect loop.
+	select {
+	case <-h.w.done:
+		return
+	default:
+	}
+	if err != nil {
+		h.w.logErrf("ws: OnClose %v", err)
+	}
+	h.shouldReconnect.Store(true)
+}
+
+func (h *eventHandler) OnPing(c *gws.Conn, payload []byte) {
+	h.touchRead()
+	_ = c.WritePong(payload)
+}
+
+func (h *eventHandler) OnPong(c *gws.Conn, payload []byte) { h.touchRead() }
+
+func (h *eventHandler) OnMessage(c *gws.Conn, message *gws.Message) {
+	defer message.Close()
+	h.touchRead()
+
+	// message.Data is a pooled *bytes.Buffer; copy before queueing so
+	// decodePump can work on a stable byte slice while gws returns the
+	// buffer to its pool.
+	src := message.Bytes()
+	msg := make([]byte, len(src))
+	copy(msg, src)
+
+	if h.w.debug {
+		h.w.logDebugf("[<] %s", string(msg))
+	}
+
+	select {
+	case h.w.rawInbox <- msg:
+	case <-h.w.done:
+		return
+	}
+}
+
 func (w *WebsocketClient) Connect(ctx context.Context) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -199,12 +264,17 @@ func (w *WebsocketClient) Connect(ctx context.Context) error {
 		return nil
 	}
 
-	if w.dialer == nil {
-		w.dialer = websocket.DefaultDialer
+	handler := &eventHandler{w: w}
+	opt := &gws.ClientOption{
+		Addr:             w.url,
+		TlsConfig:        w.tlsConfig,
+		HandshakeTimeout: 15 * time.Second,
+	}
+	if w.newDialer != nil {
+		opt.NewDialer = w.newDialer
 	}
 
-	//nolint:bodyclose // WebSocket connections don't have response bodies to close
-	conn, _, err := w.dialer.DialContext(ctx, w.url, nil)
+	conn, _, err := gws.NewClient(handler, opt)
 	if err != nil {
 		return fmt.Errorf("websocket dial: %w", err)
 	}
@@ -217,15 +287,16 @@ func (w *WebsocketClient) Connect(ctx context.Context) error {
 	reconnected := w.hasConnected
 	w.hasConnected = true
 
-	// decodePump is client-scoped (persists across reconnects); readPump and
-	// pingPump are connection-scoped and restart on each Connect. Pass the
-	// freshly-dialled conn in so each pump operates on *its* conn even if
-	// a later reconnect replaces w.conn — their defers must not close or
-	// nil a newer conn owned by a younger pump pair.
+	// decodePump is client-scoped (persists across reconnects); readPump
+	// and pingPump are connection-scoped and restart on each Connect.
+	// Pass the freshly-dialled conn in so each pump operates on *its*
+	// conn even if a later reconnect replaces w.conn — their defers
+	// must not close or nil a newer conn owned by a younger pump pair.
 	w.decodePumpOnce.Do(func() { go w.decodePump() })
 
-	go w.readPump(ctx, conn)
+	go w.readPump(ctx, conn, handler)
 	go w.pingPump(ctx, conn)
+	go w.readWatchdog(ctx, conn, handler)
 
 	if err = w.resubscribeAll(); err != nil {
 		// A partially-sent resubscribe leaves the conn alive but the
@@ -234,7 +305,7 @@ func (w *WebsocketClient) Connect(ctx context.Context) error {
 		// return at `if w.conn != nil` and never retry the missing
 		// subscribes — silent subscription loss. Roll the conn back so
 		// the retry dials fresh and rebuilds the full list.
-		_ = conn.Close()
+		_ = conn.WriteClose(1000, nil)
 		w.conn = nil
 		return fmt.Errorf("resubscribe failed, connection rolled back: %w", err)
 	}
@@ -447,20 +518,22 @@ func (w *WebsocketClient) close() error {
 	}
 
 	if w.conn != nil {
-		return w.conn.Close()
+		// Swallow errors here — an already-torn-down conn returns
+		// "use of closed network connection", which isn't actionable
+		// during shutdown.
+		_ = w.conn.WriteClose(1000, nil)
 	}
 	return nil
 }
 
 // Private methods
 
-func (w *WebsocketClient) readPump(ctx context.Context, conn *websocket.Conn) {
-	shouldReconnect := false
+func (w *WebsocketClient) readPump(ctx context.Context, conn *gws.Conn, h *eventHandler) {
 	defer func() {
 		// Always close *our* conn — this is the one this goroutine was
 		// spawned for. Do not close w.conn blindly: a successful
 		// reconnect may already have put a newer conn there.
-		_ = conn.Close()
+		_ = conn.WriteClose(1000, nil)
 
 		// Nil w.conn only if it still points at our conn. Otherwise a
 		// younger pump pair owns it and we must not touch it.
@@ -473,57 +546,17 @@ func (w *WebsocketClient) readPump(ctx context.Context, conn *websocket.Conn) {
 		// Fail all pending WS post requests so callers don't hang.
 		w.failAllInflight(ErrWsNotConnected)
 
-		if shouldReconnect {
+		if h.shouldReconnect.Load() {
 			w.reconnect(ctx)
 		}
 	}()
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-w.done:
-			return
-		default:
-			if err := conn.SetReadDeadline(time.Now().Add(w.readTimeout)); err != nil {
-				w.logErrf("websocket set read deadline: %v", err)
-				return
-			}
-
-			_, msg, err := conn.ReadMessage()
-			if err != nil {
-				var netErr net.Error
-				if errors.As(err, &netErr) && netErr.Timeout() {
-					w.logErrf("websocket read timeout, reconnecting")
-					shouldReconnect = true
-					return
-				}
-				if !websocket.IsCloseError(err, websocket.CloseNormalClosure) {
-					w.logErrf("websocket read error: %v", err)
-				}
-				// Non-timeout errors (EOF / RST / peer close) bail out
-				// without setting shouldReconnect — pingPump.w.reconnect(ctx)
-				// on the next ticker is the safety net that brings the
-				// subscription back. Keep this in sync: if the pingPump
-				// reconnect ever moves, this branch must gain its own.
-				return
-			}
-
-			if w.debug {
-				w.logDebugf("[<] %s", string(msg))
-			}
-
-			// Hand off to decodePump. Block if the inbox is full: applying
-			// backpressure to the TCP stream is safer than dropping messages.
-			select {
-			case w.rawInbox <- msg:
-			case <-ctx.Done():
-				return
-			case <-w.done:
-				return
-			}
-		}
-	}
+	// gws's ReadLoop blocks, driving OnMessage / OnClose synchronously on
+	// this goroutine (until ClientOption.ParallelEnabled is flipped, which
+	// we don't). Returns when the conn closes for any reason; OnClose
+	// fires just before ReadLoop returns, so shouldReconnect is set by
+	// the time our defer runs.
+	conn.ReadLoop()
 }
 
 // decodePump is the single consumer of rawInbox. It runs for the lifetime
@@ -549,7 +582,7 @@ func (w *WebsocketClient) decodePump() {
 	}
 }
 
-func (w *WebsocketClient) pingPump(ctx context.Context, conn *websocket.Conn) {
+func (w *WebsocketClient) pingPump(ctx context.Context, conn *gws.Conn) {
 	ticker := time.NewTicker(w.pingEvery)
 	defer ticker.Stop()
 
@@ -562,18 +595,61 @@ func (w *WebsocketClient) pingPump(ctx context.Context, conn *websocket.Conn) {
 		case <-ticker.C:
 			if err := w.writeConnJSON(conn, wsCommand{Method: "ping"}); err != nil {
 				w.logErrf("ping error: %v", err)
-				// Close *our* conn so readPump sees EOF next read and
-				// exits through its defer cleanly (and without touching
-				// the newer w.conn a racing reconnect may have put
-				// there — see the `if w.conn == conn` gate in
-				// readPump's defer). Then drive the reconnect here:
-				// readPump only sets shouldReconnect on a read *timeout*,
-				// so EOF / RST / peer-close would otherwise leave the
-				// subscriber permanently dataless. Connect is idempotent
-				// (early-returns on w.conn != nil) so even if readPump's
-				// defer also tries it the second call is a no-op.
-				_ = conn.Close()
+				// Close *our* conn so ReadLoop exits on its next frame
+				// read and readPump's defer triggers the reconnect
+				// cleanly (and without touching a newer w.conn a racing
+				// reconnect may have put there — see the
+				// `if w.conn == conn` gate in readPump's defer).
+				// Connect is idempotent (early-returns on w.conn != nil)
+				// so even if readPump's defer also reaches reconnect
+				// the duplicate call is a no-op.
+				_ = conn.WriteClose(1000, nil)
 				w.reconnect(ctx)
+				return
+			}
+		}
+	}
+}
+
+// readWatchdog fires when no inbound frame (any channel, including app-level
+// pong) has arrived within w.readTimeout. gws's ReadLoop does not auto-extend
+// a read deadline the way gorilla's SetReadDeadline-per-read pattern did, so
+// without this goroutine a silent-but-TCP-alive conn would never be detected
+// (pingPump's write-failure safety net only catches TCP death). Firing means:
+// close the conn so ReadLoop returns → OnClose sets shouldReconnect →
+// readPump's defer drives the reconnect.
+//
+// Check cadence is readTimeout/4 — tight enough that the detected-silence
+// window stays close to readTimeout, loose enough to avoid wake-up overhead
+// on idle connections. The atomic read of lastReadNanos keeps the hot path
+// (OnMessage) lock-free.
+func (w *WebsocketClient) readWatchdog(ctx context.Context, conn *gws.Conn, h *eventHandler) {
+	if w.readTimeout <= 0 {
+		return
+	}
+	interval := w.readTimeout / 4
+	if interval < 100*time.Millisecond {
+		interval = 100 * time.Millisecond
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-w.done:
+			return
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			last := time.Unix(0, h.lastReadNanos.Load())
+			if time.Since(last) > w.readTimeout {
+				w.logErrf("ws: read watchdog: no inbound for %s, reconnecting", w.readTimeout)
+				// Close this pump's conn; swallow errors (a racing
+				// reconnect may have closed it already). The readPump
+				// goroutine will see OnClose, set shouldReconnect via
+				// its handler, exit ReadLoop, and drive the reconnect
+				// in its defer.
+				_ = conn.WriteClose(1000, nil)
 				return
 			}
 		}
@@ -583,7 +659,7 @@ func (w *WebsocketClient) pingPump(ctx context.Context, conn *websocket.Conn) {
 func (w *WebsocketClient) ForceReconnect(ctx context.Context) {
 	w.mu.Lock()
 	if w.conn != nil {
-		_ = w.conn.Close()
+		_ = w.conn.WriteClose(1000, nil)
 		w.conn = nil
 	}
 	w.mu.Unlock()
@@ -680,7 +756,11 @@ func (w *WebsocketClient) writeJSON(v any) error {
 		w.logDebugf("[>] %s", string(bts))
 	}
 
-	return w.conn.WriteJSON(v)
+	b, err := jMarshal(v)
+	if err != nil {
+		return err
+	}
+	return w.conn.WriteMessage(gws.OpcodeText, b)
 }
 
 // writeConnJSON writes to a caller-supplied conn instead of w.conn. Used
@@ -688,7 +768,7 @@ func (w *WebsocketClient) writeJSON(v any) error {
 // reconnect that replaced w.conn in the meantime — otherwise a late ping
 // could travel over a younger connection and delay detection of its own
 // conn's death.
-func (w *WebsocketClient) writeConnJSON(conn *websocket.Conn, v any) error {
+func (w *WebsocketClient) writeConnJSON(conn *gws.Conn, v any) error {
 	w.writeMu.Lock()
 	defer w.writeMu.Unlock()
 
@@ -697,7 +777,11 @@ func (w *WebsocketClient) writeConnJSON(conn *websocket.Conn, v any) error {
 		w.logDebugf("[>] %s", string(bts))
 	}
 
-	return conn.WriteJSON(v)
+	b, err := jMarshal(v)
+	if err != nil {
+		return err
+	}
+	return conn.WriteMessage(gws.OpcodeText, b)
 }
 
 func (w *WebsocketClient) logErrf(fmt string, args ...any) {

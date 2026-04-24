@@ -2,11 +2,12 @@ package hyperliquid
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"os"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/lxzan/gws"
 	"github.com/sonirico/vago/lol"
 )
 
@@ -146,10 +147,20 @@ func WsOptOnConnect(fn func(context.Context, bool)) WsOpt {
 	}
 }
 
-// WsOptDialer allows setting a custom websocket.Dialer
-func WsOptDialer(dialer *websocket.Dialer) WsOpt {
+// WsOptDialerFactory sets a factory returning a gws.Dialer for each WS dial.
+// Used by proxy wiring (socks5) and tests that want to intercept the TCP
+// layer. Nil (default) makes gws use a plain net.Dialer with its own timeout.
+func WsOptDialerFactory(factory func() (gws.Dialer, error)) WsOpt {
 	return func(w *WebsocketClient) {
-		w.dialer = dialer
+		w.newDialer = factory
+	}
+}
+
+// WsOptTLSConfig sets the TLS configuration applied to wss dials. Nil uses
+// system defaults.
+func WsOptTLSConfig(cfg *tls.Config) WsOpt {
+	return func(w *WebsocketClient) {
+		w.tlsConfig = cfg
 	}
 }
 

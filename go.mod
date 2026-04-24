@@ -8,6 +8,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/joho/godotenv v1.5.1
 	github.com/json-iterator/go v1.1.12
+	github.com/lxzan/gws v1.9.1
 	github.com/mailru/easyjson v0.9.2
 	github.com/sethvargo/go-retry v0.3.0
 	github.com/shopspring/decimal v1.4.0
@@ -16,6 +17,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/valyala/fastjson v1.6.10
 	github.com/vmihailenco/msgpack/v5 v5.4.1
+	golang.org/x/net v0.47.0
 	gopkg.in/dnaeon/go-vcr.v4 v4.0.6
 )
 
@@ -32,6 +34,7 @@ require (
 	github.com/ethereum/c-kzg-4844/v2 v2.1.7 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
+	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421 // indirect
