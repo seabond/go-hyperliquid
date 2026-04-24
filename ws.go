@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"net/url"
 	"strconv"
@@ -18,6 +19,14 @@ import (
 	"github.com/sonirico/vago/lol"
 	"github.com/sonirico/vago/maps"
 )
+
+// reconnectJitterFactor keeps reconnect sleeps inside a ±25% band around
+// the exponential-backoff base. When many clients (e.g. a pool of 10 WS
+// connections behind one process, or multiple processes behind the same
+// proxy IP) disconnect together, un-jittered waits retry in lockstep and
+// thunder on the proxy / HL endpoint. 25% is small enough not to extend
+// the tail and big enough to spread out a herd within a second.
+const reconnectJitterFactor = 0.25
 
 const (
 	// pingInterval is the interval for sending ping messages to keep WebSocket alive
@@ -209,14 +218,25 @@ func (w *WebsocketClient) Connect(ctx context.Context) error {
 	w.hasConnected = true
 
 	// decodePump is client-scoped (persists across reconnects); readPump and
-	// pingPump are connection-scoped and restart on each Connect.
+	// pingPump are connection-scoped and restart on each Connect. Pass the
+	// freshly-dialled conn in so each pump operates on *its* conn even if
+	// a later reconnect replaces w.conn — their defers must not close or
+	// nil a newer conn owned by a younger pump pair.
 	w.decodePumpOnce.Do(func() { go w.decodePump() })
 
-	go w.readPump(ctx)
-	go w.pingPump(ctx)
+	go w.readPump(ctx, conn)
+	go w.pingPump(ctx, conn)
 
 	if err = w.resubscribeAll(); err != nil {
-		return err
+		// A partially-sent resubscribe leaves the conn alive but the
+		// subscription list incomplete. If we left w.conn set, the next
+		// Connect call (from our caller's reconnect loop) would early-
+		// return at `if w.conn != nil` and never retry the missing
+		// subscribes — silent subscription loss. Roll the conn back so
+		// the retry dials fresh and rebuilds the full list.
+		_ = conn.Close()
+		w.conn = nil
+		return fmt.Errorf("resubscribe failed, connection rolled back: %w", err)
 	}
 
 	if hook != nil {
@@ -422,12 +442,18 @@ func (w *WebsocketClient) close() error {
 
 // Private methods
 
-func (w *WebsocketClient) readPump(ctx context.Context) {
+func (w *WebsocketClient) readPump(ctx context.Context, conn *websocket.Conn) {
 	shouldReconnect := false
 	defer func() {
+		// Always close *our* conn — this is the one this goroutine was
+		// spawned for. Do not close w.conn blindly: a successful
+		// reconnect may already have put a newer conn there.
+		_ = conn.Close()
+
+		// Nil w.conn only if it still points at our conn. Otherwise a
+		// younger pump pair owns it and we must not touch it.
 		w.mu.Lock()
-		if w.conn != nil {
-			_ = w.conn.Close() // Ignore close error in defer
+		if w.conn == conn {
 			w.conn = nil
 		}
 		w.mu.Unlock()
@@ -447,12 +473,12 @@ func (w *WebsocketClient) readPump(ctx context.Context) {
 		case <-w.done:
 			return
 		default:
-			if err := w.conn.SetReadDeadline(time.Now().Add(w.readTimeout)); err != nil {
+			if err := conn.SetReadDeadline(time.Now().Add(w.readTimeout)); err != nil {
 				w.logErrf("websocket set read deadline: %v", err)
 				return
 			}
 
-			_, msg, err := w.conn.ReadMessage()
+			_, msg, err := conn.ReadMessage()
 			if err != nil {
 				var netErr net.Error
 				if errors.As(err, &netErr) && netErr.Timeout() {
@@ -506,7 +532,7 @@ func (w *WebsocketClient) decodePump() {
 	}
 }
 
-func (w *WebsocketClient) pingPump(ctx context.Context) {
+func (w *WebsocketClient) pingPump(ctx context.Context, conn *websocket.Conn) {
 	ticker := time.NewTicker(w.pingEvery)
 	defer ticker.Stop()
 
@@ -517,9 +543,14 @@ func (w *WebsocketClient) pingPump(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := w.sendPing(); err != nil {
+			if err := w.writeConnJSON(conn, wsCommand{Method: "ping"}); err != nil {
 				w.logErrf("ping error: %v", err)
-				w.reconnect(ctx)
+				// Close *our* conn so readPump exits on its next read
+				// and runs the reconnect loop exactly once. Calling
+				// w.reconnect directly from here used to race with
+				// readPump's defer triggering a second concurrent
+				// reconnect (harmless but wasteful).
+				_ = conn.Close()
 				return
 			}
 		}
@@ -568,13 +599,26 @@ func (w *WebsocketClient) reconnect(ctx context.Context) {
 			if err := w.Connect(ctx); err == nil {
 				return
 			}
-			time.Sleep(w.reconnectWait)
-			w.reconnectWait *= 2 // TODO: configurable strategies such as exponential backoff and the like
+			time.Sleep(w.reconnectDelay())
+			w.reconnectWait *= 2
 			if w.reconnectWait > time.Minute {
 				w.reconnectWait = time.Minute
 			}
 		}
 	}
+}
+
+// reconnectDelay returns the current exponential-backoff base with a ±25%
+// jitter applied. Spreads a thundering herd of simultaneously-disconnected
+// clients so they don't retry in lockstep.
+func (w *WebsocketClient) reconnectDelay() time.Duration {
+	base := float64(w.reconnectWait)
+	jitter := (rand.Float64()*2 - 1) * base * reconnectJitterFactor
+	d := time.Duration(base + jitter)
+	if d < 0 {
+		d = 0
+	}
+	return d
 }
 
 func (w *WebsocketClient) resubscribeAll() error {
@@ -600,10 +644,6 @@ func (w *WebsocketClient) sendUnsubscribe(payload subscriptable) error {
 	})
 }
 
-func (w *WebsocketClient) sendPing() error {
-	return w.writeJSON(wsCommand{Method: "ping"})
-}
-
 func (w *WebsocketClient) writeJSON(v any) error {
 	w.writeMu.Lock()
 	defer w.writeMu.Unlock()
@@ -618,6 +658,23 @@ func (w *WebsocketClient) writeJSON(v any) error {
 	}
 
 	return w.conn.WriteJSON(v)
+}
+
+// writeConnJSON writes to a caller-supplied conn instead of w.conn. Used
+// by pingPump so it continues to ping *its* conn regardless of any
+// reconnect that replaced w.conn in the meantime — otherwise a late ping
+// could travel over a younger connection and delay detection of its own
+// conn's death.
+func (w *WebsocketClient) writeConnJSON(conn *websocket.Conn, v any) error {
+	w.writeMu.Lock()
+	defer w.writeMu.Unlock()
+
+	if w.debug {
+		bts, _ := jMarshal(v)
+		w.logDebugf("[>] %s", string(bts))
+	}
+
+	return conn.WriteJSON(v)
 }
 
 func (w *WebsocketClient) logErrf(fmt string, args ...any) {
