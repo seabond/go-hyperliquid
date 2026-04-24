@@ -102,51 +102,74 @@ import (
 )
 
 func main() {
-    // For trading, create an Exchange with your private key
-    privateKey, _ := crypto.HexToECDSA("your-private-key")
-    exchange := hyperliquid.NewExchange(
-        context.Background(),
-        privateKey,
-        hyperliquid.MainnetAPIURL,
-        nil,    // Meta will be fetched automatically
-        "vault-address",
-        "account-address",
-        nil,    // SpotMeta will be fetched automatically
-        nil,    // PerpDexs will be fetched automatically
-    )
+    ctx := context.Background()
 
-    // Place a limit order
-    order := hyperliquid.OrderRequest{
-        Coin:    "BTC",
-        IsBuy:   true,
-        Size:    0.1,
-        LimitPx: 40000.0,
-        OrderType: hyperliquid.OrderType{
-            Limit: &hyperliquid.LimitOrderType{
-                Tif: "Gtc",
-            },
-        },
+    // --- Trading: build an Exchange ---
+    pk, err := crypto.HexToECDSA("your-64-char-hex-private-key")
+    if err != nil {
+        log.Fatal(err)
     }
+    account := hyperliquid.NewAccount(pk)
 
-    resp, err := exchange.Order(context.Background(), order, nil)
+    ex, err := hyperliquid.NewExchange(
+        ctx,
+        account,
+        hyperliquid.MainnetAPIURL,
+        nil,                     // Meta: nil → fetched from /info
+        "",                      // vaultAddr: "" for EOA; set when trading a vault
+        account.Address().Hex(), // accountAddr: signer or sub-account
+        nil,                     // SpotMeta: nil → fetched
+        nil,                     // PerpDexs: nil → fetched
+    )
     if err != nil {
         log.Fatal(err)
     }
 
-    // Subscribe to WebSocket updates
+    // Place a GTC limit buy. Grouping=GroupingNA for a standalone order;
+    // set builder=nil unless you're using the builder-fee program.
+    status, err := ex.Order(ctx, hyperliquid.GroupingNA, hyperliquid.CreateOrderRequest{
+        Coin:  "BTC",
+        IsBuy: true,
+        Price: 40000,
+        Size:  0.001,
+        OrderType: hyperliquid.OrderType{
+            Limit: &hyperliquid.LimitOrderType{Tif: hyperliquid.TifGtc},
+        },
+    }, nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Printf("order status: %+v\n", status)
+
+    // --- WebSocket subscription ---
     ws := hyperliquid.NewWebsocketClient(hyperliquid.MainnetAPIURL)
-    if err := ws.Connect(context.Background()); err != nil {
+    if err := ws.Connect(ctx); err != nil {
         log.Fatal(err)
     }
     defer ws.Close()
 
-    // Subscribe to BTC trades
-    _, err = ws.Subscribe(hyperliquid.Subscription{
-        Type: "trades",
-        Coin: "BTC",
-    }, func(msg hyperliquid.wsMessage) {
-        fmt.Printf("Trade: %+v\n", msg)
-    })
+    // Each channel has its own typed subscribe method + callback. There is
+    // no generic Subscribe(string, any). See ws_sub_*.go for the full set
+    // (AllMids, AllDexsClearinghouseState, SpotState, OrderFills, Bbo, …).
+    sub, err := ws.Trades(
+        hyperliquid.TradesSubscriptionParams{Coin: "BTC"},
+        func(trades []hyperliquid.Trade, err error) {
+            if err != nil {
+                log.Printf("trades cb err: %v", err)
+                return
+            }
+            for _, t := range trades {
+                fmt.Printf("%s %s @ %s\n", t.Side, t.Sz, t.Px)
+            }
+        },
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer sub.Close()
+
+    // Block — real apps wait on a context or a shutdown signal.
+    select {}
 }
 ```
 
