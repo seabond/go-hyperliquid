@@ -710,9 +710,9 @@ type PerpDeployAuctionStatus struct {
 // [timestamp_ms, "value"] tuple form for fidelity; use Points() /
 // PnlPoints() for the typed view.
 type AccountHistory struct {
-	AccountValueHistory []MixedArray `json:"accountValueHistory"` // [timestamp_ms, "value"]
-	PnlHistory          []MixedArray `json:"pnlHistory"`          // [timestamp_ms, "value"]
-	Vlm                 string       `json:"vlm"`
+	AccountValueHistory []MixedArray    `json:"accountValueHistory"` // [timestamp_ms, "value"]
+	PnlHistory          []MixedArray    `json:"pnlHistory"`          // [timestamp_ms, "value"]
+	Volume              decimal.Decimal `json:"vlm"`
 }
 
 // HistoryPoint is the typed form of a single [timestamp_ms, "value"]
@@ -720,23 +720,23 @@ type AccountHistory struct {
 // raw decimal string HL emits — callers decide whether to parse it as
 // float64, decimal.Decimal, etc.
 type HistoryPoint struct {
-	TimeMs int64
-	Value  string
+	Timestamp int64           `json:"timestamp,omitempty"`
+	Value     decimal.Decimal `json:"value"`
 }
 
-// Time returns TimeMs as a time.Time in UTC.
-func (p HistoryPoint) Time() time.Time { return time.UnixMilli(p.TimeMs).UTC() }
+// Time returns Timestamp as a time.Time in UTC.
+func (p HistoryPoint) Time() time.Time { return time.UnixMilli(p.Timestamp).UTC() }
 
-// Points returns AccountValueHistory parsed into typed HistoryPoint
+// ParsedAccountValue returns AccountValueHistory parsed into typed HistoryPoint
 // entries. Malformed tuples (wrong arity, non-numeric ts, non-string
 // value) are skipped silently.
-func (h AccountHistory) Points() []HistoryPoint {
+func (h AccountHistory) ParsedAccountValue() []HistoryPoint {
 	return parseHistoryPoints(h.AccountValueHistory)
 }
 
-// PnlPoints returns PnlHistory parsed into typed HistoryPoint entries.
+// PasredPNL returns PnlHistory parsed into typed HistoryPoint entries.
 // Same skip-malformed policy as Points.
-func (h AccountHistory) PnlPoints() []HistoryPoint {
+func (h AccountHistory) PasredPNL() []HistoryPoint {
 	return parseHistoryPoints(h.PnlHistory)
 }
 
@@ -760,15 +760,16 @@ func parseHistoryPoints(raw []MixedArray) []HistoryPoint {
 		if len(e) < 2 {
 			continue
 		}
-		var ts int64
-		if err := e[0].Parse(&ts); err != nil {
+		var timestamp int64
+		if err := e[0].Parse(&timestamp); err != nil {
 			continue
 		}
-		v, ok := e[1].String()
+		valueStr, ok := e[1].String()
 		if !ok {
 			continue
 		}
-		out = append(out, HistoryPoint{TimeMs: ts, Value: v})
+		value, _ := decimal.NewFromString(valueStr)
+		out = append(out, HistoryPoint{Timestamp: timestamp, Value: value})
 	}
 	return out
 }
@@ -861,10 +862,9 @@ func ParseFullPortfolio(ps []Portfolio) FullPortfolio {
 type AbstractionMode string
 
 const (
-	AbstractionDefault          AbstractionMode = "default"
-	AbstractionDisabled         AbstractionMode = "disabled"
-	AbstractionUnifiedAccount   AbstractionMode = "unifiedAccount"
-	AbstractionPortfolioMargin  AbstractionMode = "portfolioMargin"
-	AbstractionDexAbstraction   AbstractionMode = "dexAbstraction"
+	AbstractionDefault         AbstractionMode = "default"
+	AbstractionDisabled        AbstractionMode = "disabled"
+	AbstractionUnifiedAccount  AbstractionMode = "unifiedAccount"
+	AbstractionPortfolioMargin AbstractionMode = "portfolioMargin"
+	AbstractionDexAbstraction  AbstractionMode = "dexAbstraction"
 )
-

@@ -7609,17 +7609,19 @@ func easyjson6601e8cdDecodeGithubComSoniricoGoHyperliquid65(in *jlexer.Lexer, ou
 		key := in.UnsafeFieldName(false)
 		in.WantColon()
 		switch key {
-		case "TimeMs":
+		case "timestamp":
 			if in.IsNull() {
 				in.Skip()
 			} else {
-				out.TimeMs = int64(in.Int64())
+				out.Timestamp = int64(in.Int64())
 			}
-		case "Value":
+		case "value":
 			if in.IsNull() {
 				in.Skip()
 			} else {
-				out.Value = string(in.String())
+				if data := in.Raw(); in.Ok() {
+					in.AddError((out.Value).UnmarshalJSON(data))
+				}
 			}
 		default:
 			in.SkipRecursive()
@@ -7635,15 +7637,21 @@ func easyjson6601e8cdEncodeGithubComSoniricoGoHyperliquid65(out *jwriter.Writer,
 	out.RawByte('{')
 	first := true
 	_ = first
-	{
-		const prefix string = ",\"TimeMs\":"
+	if in.Timestamp != 0 {
+		const prefix string = ",\"timestamp\":"
+		first = false
 		out.RawString(prefix[1:])
-		out.Int64(int64(in.TimeMs))
+		out.Int64(int64(in.Timestamp))
 	}
 	{
-		const prefix string = ",\"Value\":"
-		out.RawString(prefix)
-		out.String(string(in.Value))
+		const prefix string = ",\"value\":"
+		if first {
+			first = false
+			out.RawString(prefix[1:])
+		} else {
+			out.RawString(prefix)
+		}
+		out.Raw((in.Value).MarshalJSON())
 	}
 	out.RawByte('}')
 }
@@ -10086,7 +10094,9 @@ func easyjson6601e8cdDecodeGithubComSoniricoGoHyperliquid88(in *jlexer.Lexer, ou
 			if in.IsNull() {
 				in.Skip()
 			} else {
-				out.Vlm = string(in.String())
+				if data := in.Raw(); in.Ok() {
+					in.AddError((out.Volume).UnmarshalJSON(data))
+				}
 			}
 		default:
 			in.SkipRecursive()
@@ -10159,7 +10169,7 @@ func easyjson6601e8cdEncodeGithubComSoniricoGoHyperliquid88(out *jwriter.Writer,
 	{
 		const prefix string = ",\"vlm\":"
 		out.RawString(prefix)
-		out.String(string(in.Vlm))
+		out.Raw((in.Volume).MarshalJSON())
 	}
 	out.RawByte('}')
 }
