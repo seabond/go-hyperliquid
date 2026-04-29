@@ -508,9 +508,18 @@ type StakingReward struct {
 }
 
 type ReferralState struct {
-	ReferralCode string   `json:"referralCode"`
-	Referrer     string   `json:"referrer"`
-	Referred     []string `json:"referred"`
+	ReferralCode string         `json:"referralCode"`
+	Referrer     string         `json:"referrer"`
+	Referred     []string       `json:"referred"`
+	ReferredBy   *ReferredByRef `json:"referredBy,omitempty"`
+}
+
+// ReferredByRef is the inviter info for a user that signed up under
+// someone else's referral code. Empty (nil) when the user has not been
+// referred by anyone.
+type ReferredByRef struct {
+	Code     string `json:"code"`
+	Referrer string `json:"referrer"`
 }
 
 type SubAccount struct {
@@ -702,8 +711,103 @@ type AccountHistory struct {
 	Vlm                 string       `json:"vlm"`
 }
 
+// LastPnl returns the last entry in PnlHistory as a string — what HL's
+// UI shows as "performance" for the window. Returns ("", false) when the
+// series is empty or the trailing tuple is malformed.
+func (h AccountHistory) LastPnl() (string, bool) {
+	if len(h.PnlHistory) == 0 {
+		return "", false
+	}
+	last := h.PnlHistory[len(h.PnlHistory)-1]
+	if len(last) < 2 {
+		return "", false
+	}
+	return last[1].String()
+}
+
 // Portfolio represents a user's portfolio
 type Portfolio []MixedValue // [string, AccountHistory]
+
+// PortfolioBucket is the typed view of a single Portfolio tuple:
+// the window name (e.g. "day", "week", "perpDay", "perpAllTime") and
+// its parsed AccountHistory.
+type PortfolioBucket struct {
+	Name    string
+	History AccountHistory
+}
+
+// PortfolioBuckets parses a raw []Portfolio (the API returns untyped
+// [name, AccountHistory] tuples) into typed buckets. Tuples that fail
+// to decode are skipped silently — callers that need strict parsing
+// should walk the raw form themselves. Use ParseFullPortfolio when you
+// want the standard windows hoisted into named fields.
+func PortfolioBuckets(ps []Portfolio) []PortfolioBucket {
+	out := make([]PortfolioBucket, 0, len(ps))
+	for _, p := range ps {
+		if len(p) < 2 {
+			continue
+		}
+		name, ok := p[0].String()
+		if !ok {
+			continue
+		}
+		var hist AccountHistory
+		if err := p[1].Parse(&hist); err != nil {
+			continue
+		}
+		out = append(out, PortfolioBucket{Name: name, History: hist})
+	}
+	return out
+}
+
+// PortfolioPeriods groups the four standard time windows HL returns
+// for a given account scope (combined-account or perp-only). Missing
+// windows are zero-valued AccountHistory; LastPnl() on a zero-value
+// returns false.
+type PortfolioPeriods struct {
+	Day     AccountHistory
+	Week    AccountHistory
+	Month   AccountHistory
+	AllTime AccountHistory
+}
+
+// FullPortfolio is the fully-parsed view of HL's portfolio response.
+// Combined holds the all-asset windows ("day"/"week"/"month"/"allTime");
+// Perp holds the perp-only windows ("perpDay"/.../"perpAllTime").
+// Unknown bucket names (anything HL adds in the future) are dropped —
+// reach for PortfolioBuckets if you need to see them.
+type FullPortfolio struct {
+	Combined PortfolioPeriods
+	Perp     PortfolioPeriods
+}
+
+// ParseFullPortfolio extracts both the combined and perp time-windows
+// from a raw []Portfolio. Buckets that fail to decode are dropped (same
+// policy as PortfolioBuckets).
+func ParseFullPortfolio(ps []Portfolio) FullPortfolio {
+	var fp FullPortfolio
+	for _, b := range PortfolioBuckets(ps) {
+		switch b.Name {
+		case "day":
+			fp.Combined.Day = b.History
+		case "week":
+			fp.Combined.Week = b.History
+		case "month":
+			fp.Combined.Month = b.History
+		case "allTime":
+			fp.Combined.AllTime = b.History
+		case "perpDay":
+			fp.Perp.Day = b.History
+		case "perpWeek":
+			fp.Perp.Week = b.History
+		case "perpMonth":
+			fp.Perp.Month = b.History
+		case "perpAllTime":
+			fp.Perp.AllTime = b.History
+		}
+	}
+	return fp
+}
 
 // AbstractionMode represents the account abstraction mode
 type AbstractionMode string
