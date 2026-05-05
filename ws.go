@@ -712,6 +712,9 @@ func (w *WebsocketClient) reconnect(ctx context.Context) {
 // clients so they don't retry in lockstep.
 func (w *WebsocketClient) reconnectDelay() time.Duration {
 	base := float64(w.reconnectWait)
+	// #nosec G404 -- jitter only, no security boundary; math/rand is the
+	// correct primitive for retry stagger. Switching to crypto/rand here
+	// adds an io.Reader error path with no actual security benefit.
 	jitter := (rand.Float64()*2 - 1) * base * reconnectJitterFactor
 	d := time.Duration(base + jitter)
 	if d < 0 {
