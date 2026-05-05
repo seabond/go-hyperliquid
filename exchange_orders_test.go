@@ -215,7 +215,13 @@ func TestOrders(t *testing.T) {
 					},
 				},
 			},
-			wantErr: "failed to create order: User or API Wallet",
+			// Substring rather than full prefix: HL's auth-failure message
+			// surfaces via executeAction's "exchange action rejected: ..."
+			// envelope wrapper (added in da9c815), not the per-order
+			// "failed to create order: ..." path which only fires when the
+			// envelope check passes. Anchoring on the user-visible content
+			// keeps this assertion stable across either wrapping layer.
+			wantErr: "User or API Wallet",
 			record:  false,
 		},
 		{
