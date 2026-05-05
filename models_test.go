@@ -117,24 +117,28 @@ func TestPosition_MarshalJSON(t *testing.T) {
 		expected string
 	}{
 		{
+			// Source decimals must already be in canonical form (no
+			// trailing zeros) so the JSON round-trip preserves their
+			// {value, exp} pair — see the comment on TestUserState_MarshalJSON
+			// for the underlying shopspring/decimal canonicalisation rule.
 			name: "long_position",
 			pos: Position{
 				Coin:           "BTC",
-				EntryPx:        decimalPtr("50000.0"),
+				EntryPx:        decimalIntPtr(50000),
 				Leverage:       Leverage{Type: "cross", Value: 10},
-				LiquidationPx:  decimalPtr("45000.0"),
-				MarginUsed:     decimal.RequireFromString("5000.0"),
-				PositionValue:  decimal.RequireFromString("50000.0"),
+				LiquidationPx:  decimalIntPtr(45000),
+				MarginUsed:     decimal.NewFromInt(5000),
+				PositionValue:  decimal.NewFromInt(50000),
 				ReturnOnEquity: decimal.RequireFromString("0.05"),
-				Szi:            decimal.RequireFromString("1.0"),
-				UnrealizedPnl:  decimal.RequireFromString("2500.0"),
+				Szi:            decimal.NewFromInt(1),
+				UnrealizedPnl:  decimal.NewFromInt(2500),
 				CumFunding: &CumFunding{
 					AllTime:     "0.03621",
 					SinceChange: "-0.001129",
 					SinceOpen:   "-0.001129",
 				},
 			},
-			expected: `{"coin":"BTC","entryPx":"50000.0","leverage":{"type":"cross","value":10},"liquidationPx":"45000.0","marginUsed":"5000.0","positionValue":"50000.0","returnOnEquity":"0.05","szi":"1.0","unrealizedPnl":"2500.0","cumFunding":{"allTime":"0.03621","sinceOpen":"-0.001129","sinceChange":"-0.001129"}}`,
+			expected: `{"coin":"BTC","entryPx":"50000","leverage":{"type":"cross","value":10},"liquidationPx":"45000","marginUsed":"5000","positionValue":"50000","returnOnEquity":"0.05","szi":"1","unrealizedPnl":"2500","cumFunding":{"allTime":"0.03621","sinceOpen":"-0.001129","sinceChange":"-0.001129"}}`,
 		},
 		{
 			name: "no_position",
@@ -143,13 +147,13 @@ func TestPosition_MarshalJSON(t *testing.T) {
 				EntryPx:        nil,
 				Leverage:       Leverage{Type: "isolated", Value: 5, RawUsd: stringPtr("1000.0")},
 				LiquidationPx:  nil,
-				MarginUsed:     decimal.RequireFromString("0.0"),
-				PositionValue:  decimal.RequireFromString("0.0"),
-				ReturnOnEquity: decimal.RequireFromString("0.0"),
-				Szi:            decimal.RequireFromString("0.0"),
-				UnrealizedPnl:  decimal.RequireFromString("0.0"),
+				MarginUsed:     decimal.NewFromInt(0),
+				PositionValue:  decimal.NewFromInt(0),
+				ReturnOnEquity: decimal.NewFromInt(0),
+				Szi:            decimal.NewFromInt(0),
+				UnrealizedPnl:  decimal.NewFromInt(0),
 			},
-			expected: `{"coin":"ETH","entryPx":null,"leverage":{"type":"isolated","value":5,"rawUsd":"1000.0"},"liquidationPx":null,"marginUsed":"0.0","positionValue":"0.0","returnOnEquity":"0.0","szi":"0.0","unrealizedPnl":"0.0"}`,
+			expected: `{"coin":"ETH","entryPx":null,"leverage":{"type":"isolated","value":5,"rawUsd":"1000.0"},"liquidationPx":null,"marginUsed":"0","positionValue":"0","returnOnEquity":"0","szi":"0","unrealizedPnl":"0"}`,
 		},
 	}
 
@@ -226,59 +230,74 @@ func TestUserState_MarshalJSON(t *testing.T) {
 		expected string
 	}{
 		{
+			// Source decimals must already be in shopspring/decimal's
+			// canonical form (no trailing zeros) — MarshalJSON drops them
+			// and the round-trip via UnmarshalJSON would otherwise produce
+			// a struct with a different exp than the source, failing the
+			// reflect.DeepEqual at the bottom. Use NewFromInt for whole
+			// numbers and only RequireFromString for genuinely fractional
+			// values like "0.05" where the source already is canonical.
 			name: "user_state_with_positions",
 			state: UserState{
 				AssetPositions: []AssetPosition{
 					{
 						Position: Position{
 							Coin:           "BTC",
-							EntryPx:        decimalPtr("50000.0"),
+							EntryPx:        decimalIntPtr(50000),
 							Leverage:       Leverage{Type: "cross", Value: 10},
-							LiquidationPx:  decimalPtr("45000.0"),
-							MarginUsed:     decimal.RequireFromString("5000.0"),
-							PositionValue:  decimal.RequireFromString("50000.0"),
+							LiquidationPx:  decimalIntPtr(45000),
+							MarginUsed:     decimal.NewFromInt(5000),
+							PositionValue:  decimal.NewFromInt(50000),
 							ReturnOnEquity: decimal.RequireFromString("0.05"),
-							Szi:            decimal.RequireFromString("1.0"),
-							UnrealizedPnl:  decimal.RequireFromString("2500.0"),
+							Szi:            decimal.NewFromInt(1),
+							UnrealizedPnl:  decimal.NewFromInt(2500),
 						},
 						Type: "oneWay",
 					},
 				},
 				CrossMarginSummary: MarginSummary{
-					AccountValue:    decimal.RequireFromString("100000.0"),
-					TotalMarginUsed: decimal.RequireFromString("5000.0"),
-					TotalNtlPos:     decimal.RequireFromString("50000.0"),
-					TotalRawUsd:     decimal.RequireFromString("100000.0"),
+					AccountValue:    decimal.NewFromInt(100000),
+					TotalMarginUsed: decimal.NewFromInt(5000),
+					TotalNtlPos:     decimal.NewFromInt(50000),
+					TotalRawUsd:     decimal.NewFromInt(100000),
 				},
 				MarginSummary: MarginSummary{
-					AccountValue:    decimal.RequireFromString("100000.0"),
-					TotalMarginUsed: decimal.RequireFromString("5000.0"),
-					TotalNtlPos:     decimal.RequireFromString("50000.0"),
-					TotalRawUsd:     decimal.RequireFromString("100000.0"),
+					AccountValue:    decimal.NewFromInt(100000),
+					TotalMarginUsed: decimal.NewFromInt(5000),
+					TotalNtlPos:     decimal.NewFromInt(50000),
+					TotalRawUsd:     decimal.NewFromInt(100000),
 				},
 				Withdrawable: "95000.0",
 			},
-			expected: `{"assetPositions":[{"position":{"coin":"BTC","entryPx":"50000.0","leverage":{"type":"cross","value":10},"liquidationPx":"45000.0","marginUsed":"5000.0","positionValue":"50000.0","returnOnEquity":"0.05","szi":"1.0","unrealizedPnl":"2500.0"},"type":"oneWay"}],"crossMarginSummary":{"accountValue":"100000.0","totalMarginUsed":"5000.0","totalNtlPos":"50000.0","totalRawUsd":"100000.0"},"marginSummary":{"accountValue":"100000.0","totalMarginUsed":"5000.0","totalNtlPos":"50000.0","totalRawUsd":"100000.0"},"withdrawable":"95000.0"}`,
+			expected: `{"assetPositions":[{"position":{"coin":"BTC","entryPx":"50000","leverage":{"type":"cross","value":10},"liquidationPx":"45000","marginUsed":"5000","positionValue":"50000","returnOnEquity":"0.05","szi":"1","unrealizedPnl":"2500"},"type":"oneWay"}],"crossMarginSummary":{"accountValue":"100000","totalMarginUsed":"5000","totalNtlPos":"50000","totalRawUsd":"100000"},"marginSummary":{"accountValue":"100000","totalMarginUsed":"5000","totalNtlPos":"50000","totalRawUsd":"100000"},"withdrawable":"95000.0"}`,
 		},
 		{
+			// shopspring/decimal canonicalises zero to "0" on Marshal
+			// regardless of source exponent — RequireFromString("0.0")
+			// produces {value:0, exp:-1} but its MarshalJSON drops the
+			// fractional part because 0×10^-1 == 0×10^0. The test's
+			// expected JSON and round-trip equality must reflect the
+			// post-canonicalisation form, not the source string. Using
+			// NewFromInt(0) makes the source exp match the round-tripped
+			// exp so the struct equality assertion holds.
 			name: "empty_user_state",
 			state: UserState{
 				AssetPositions: []AssetPosition{},
 				CrossMarginSummary: MarginSummary{
-					AccountValue:    decimal.RequireFromString("0.0"),
-					TotalMarginUsed: decimal.RequireFromString("0.0"),
-					TotalNtlPos:     decimal.RequireFromString("0.0"),
-					TotalRawUsd:     decimal.RequireFromString("0.0"),
+					AccountValue:    decimal.NewFromInt(0),
+					TotalMarginUsed: decimal.NewFromInt(0),
+					TotalNtlPos:     decimal.NewFromInt(0),
+					TotalRawUsd:     decimal.NewFromInt(0),
 				},
 				MarginSummary: MarginSummary{
-					AccountValue:    decimal.RequireFromString("0.0"),
-					TotalMarginUsed: decimal.RequireFromString("0.0"),
-					TotalNtlPos:     decimal.RequireFromString("0.0"),
-					TotalRawUsd:     decimal.RequireFromString("0.0"),
+					AccountValue:    decimal.NewFromInt(0),
+					TotalMarginUsed: decimal.NewFromInt(0),
+					TotalNtlPos:     decimal.NewFromInt(0),
+					TotalRawUsd:     decimal.NewFromInt(0),
 				},
 				Withdrawable: "0.0",
 			},
-			expected: `{"assetPositions":[],"crossMarginSummary":{"accountValue":"0.0","totalMarginUsed":"0.0","totalNtlPos":"0.0","totalRawUsd":"0.0"},"marginSummary":{"accountValue":"0.0","totalMarginUsed":"0.0","totalNtlPos":"0.0","totalRawUsd":"0.0"},"withdrawable":"0.0"}`,
+			expected: `{"assetPositions":[],"crossMarginSummary":{"accountValue":"0","totalMarginUsed":"0","totalNtlPos":"0","totalRawUsd":"0"},"marginSummary":{"accountValue":"0","totalMarginUsed":"0","totalNtlPos":"0","totalRawUsd":"0"},"withdrawable":"0.0"}`,
 		},
 	}
 
@@ -359,7 +378,11 @@ func TestLevel_UnmarshalJSON_StringToFloat(t *testing.T) {
 	assert.Equal(t, 1.456789, level.Sz)
 }
 
-func decimalPtr(s string) *decimal.Decimal {
-	d := decimal.RequireFromString(s)
+// decimalIntPtr returns a pointer to a Decimal constructed from the integer
+// value v. Useful in tests where the source decimal must already be in
+// canonical form (exp=0) so a JSON round-trip via MarshalJSON / UnmarshalJSON
+// does not mutate the underlying {value, exp} pair and break struct equality.
+func decimalIntPtr(v int64) *decimal.Decimal {
+	d := decimal.NewFromInt(v)
 	return &d
 }
