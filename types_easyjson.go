@@ -3888,6 +3888,12 @@ func easyjson6601e8cdDecodeGithubComSoniricoGoHyperliquid33(in *jlexer.Lexer, ou
 					(*out.ReferredBy).UnmarshalEasyJSON(in)
 				}
 			}
+		case "cumVlm":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.CumVlm = string(in.String())
+			}
 		default:
 			in.SkipRecursive()
 		}
@@ -3932,6 +3938,11 @@ func easyjson6601e8cdEncodeGithubComSoniricoGoHyperliquid33(out *jwriter.Writer,
 		const prefix string = ",\"referredBy\":"
 		out.RawString(prefix)
 		(*in.ReferredBy).MarshalEasyJSON(out)
+	}
+	{
+		const prefix string = ",\"cumVlm\":"
+		out.RawString(prefix)
+		out.String(string(in.CumVlm))
 	}
 	out.RawByte('}')
 }

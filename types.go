@@ -513,6 +513,7 @@ type ReferralState struct {
 	Referrer     string         `json:"referrer"`
 	Referred     []string       `json:"referred"`
 	ReferredBy   *ReferredByRef `json:"referredBy,omitempty"`
+	CumVlm       string         `json:"cumVlm"`
 }
 
 // ReferredByRef is the inviter info for a user that signed up under
