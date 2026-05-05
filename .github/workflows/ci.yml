@@ -22,16 +22,14 @@ jobs:
       uses: actions/setup-go@v6
       with:
         go-version: ${{ matrix.go-version }}
-
-    - name: Cache Go modules
-      uses: actions/cache@v5
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-${{ matrix.go-version }}-
+        # actions/setup-go@v4+ caches both ~/go/pkg/mod and ~/.cache/go-build
+        # by default, keyed on go.sum. A second actions/cache step pointed at
+        # the same paths fights the built-in restore and trips
+        # "tar: ... Cannot open: File exists" on every run. Keep this as the
+        # one source of truth; if a custom key is ever needed, disable the
+        # built-in via `cache: false` and own both paths from one
+        # actions/cache step.
+        cache-dependency-path: go.sum
 
     - name: Download dependencies
       run: go mod download
