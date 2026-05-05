@@ -89,7 +89,7 @@ func newCreateOrderAction(
 	if grouping == "" {
 		grouping = GroupingNA
 	}
-	
+
 	orderRequests := make([]OrderWire, len(orders))
 	for i, order := range orders {
 		priceWire, err := floatToWire(order.Price)

@@ -1,10 +1,10 @@
 package hyperliquid
 
 import (
-	"encoding/json"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"sort"

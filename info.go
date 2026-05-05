@@ -1,8 +1,8 @@
 package hyperliquid
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"sync/atomic"

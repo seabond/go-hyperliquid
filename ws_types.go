@@ -7,25 +7,25 @@ import (
 //go:generate easyjson -all
 
 const (
-	ChannelPong               string = "pong"
-	ChannelTrades             string = "trades"
-	ChannelActiveAssetCtx     string = "activeAssetCtx"
-	ChannelL2Book             string = "l2Book"
-	ChannelCandle             string = "candle"
-	ChannelAllMids            string = "allMids"
-	ChannelNotification       string = "notification"
-	ChannelOrderUpdates       string = "orderUpdates"
-	ChannelUserFills          string = "userFills"
-	ChannelWebData2           string = "webData2"
-	ChannelBbo                string = "bbo"
-	ChannelSubResponse        string = "subscriptionResponse"
-	ChannelClearinghouseState string = "clearinghouseState"
-	ChannelOpenOrders         string = "openOrders"
-	ChannelTwapStates         string = "twapStates"
-	ChannelWebData3                      string = "webData3"
-	ChannelAllDexsClearinghouseState     string = "allDexsClearinghouseState"
-	ChannelSpotState                    string = "spotState"
-	ChannelAllDexsAssetCtxs             string = "allDexsAssetCtxs"
+	ChannelPong                      string = "pong"
+	ChannelTrades                    string = "trades"
+	ChannelActiveAssetCtx            string = "activeAssetCtx"
+	ChannelL2Book                    string = "l2Book"
+	ChannelCandle                    string = "candle"
+	ChannelAllMids                   string = "allMids"
+	ChannelNotification              string = "notification"
+	ChannelOrderUpdates              string = "orderUpdates"
+	ChannelUserFills                 string = "userFills"
+	ChannelWebData2                  string = "webData2"
+	ChannelBbo                       string = "bbo"
+	ChannelSubResponse               string = "subscriptionResponse"
+	ChannelClearinghouseState        string = "clearinghouseState"
+	ChannelOpenOrders                string = "openOrders"
+	ChannelTwapStates                string = "twapStates"
+	ChannelWebData3                  string = "webData3"
+	ChannelAllDexsClearinghouseState string = "allDexsClearinghouseState"
+	ChannelSpotState                 string = "spotState"
+	ChannelAllDexsAssetCtxs          string = "allDexsAssetCtxs"
 )
 
 type wsMessage struct {
@@ -414,7 +414,6 @@ func (a *AllDexsAssetCtxs) UnmarshalJSON(data []byte) error {
 func (a AllDexsAssetCtxs) Key() string {
 	return key(ChannelAllDexsAssetCtxs)
 }
-
 
 var (
 	candleNoop = Candle{}

@@ -89,8 +89,8 @@ type WebsocketClient struct {
 	hasConnected          bool
 
 	// WS post support: send exchange/info actions over WS instead of HTTP.
-	postIDCounter atomic.Int64 // monotonically increasing request ID
-	postInflight  sync.Map     // id (int64) -> chan postResponse
+	postIDCounter atomic.Int64  // monotonically increasing request ID
+	postInflight  sync.Map      // id (int64) -> chan postResponse
 	postSem       chan struct{} // counting semaphore, cap = maxPostInflight
 
 	// rawInbox decouples network reads from decode/dispatch. The gws

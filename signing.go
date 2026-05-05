@@ -1,12 +1,12 @@
 package hyperliquid
 
 import (
-	"encoding/json"
 	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"strconv"

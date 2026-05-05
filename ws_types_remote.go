@@ -105,9 +105,9 @@ func (p remoteOrderUpdatesSubscriptionPayload) Key() string {
 //
 //easyjson:skip
 type remoteOrderFillsSubscriptionPayload struct {
-	Type             string `json:"type"`
-	User             string `json:"user"`
-	AggregateByTime  *bool  `json:"aggregateByTime,omitempty"`
+	Type            string `json:"type"`
+	User            string `json:"user"`
+	AggregateByTime *bool  `json:"aggregateByTime,omitempty"`
 }
 
 func (p remoteOrderFillsSubscriptionPayload) Channel() string {
