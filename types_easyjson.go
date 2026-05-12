@@ -7541,6 +7541,70 @@ func easyjson6601e8cdDecodeGithubComSoniricoGoHyperliquid64(in *jlexer.Lexer, ou
 			} else {
 				out.Fee = string(in.String())
 			}
+		case "usdcValue":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.UsdcValue = string(in.String())
+			}
+		case "feeToken":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.FeeToken = string(in.String())
+			}
+		case "nativeTokenFee":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.NativeTokenFee = string(in.String())
+			}
+		case "token":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.Token = string(in.String())
+			}
+		case "amount":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.Amount = string(in.String())
+			}
+		case "sourceDex":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.SourceDex = string(in.String())
+			}
+		case "destinationDex":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.DestinationDex = string(in.String())
+			}
+		case "vault":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.Vault = string(in.String())
+			}
+		case "nonce":
+			if in.IsNull() {
+				in.Skip()
+				out.Nonce = nil
+			} else {
+				v := int64(in.Int64())
+				out.Nonce = &v
+			}
+		case "toPerp":
+			if in.IsNull() {
+				in.Skip()
+				out.ToPerp = nil
+			} else {
+				v := bool(in.Bool())
+				out.ToPerp = &v
+			}
 		default:
 			in.SkipRecursive()
 		}
@@ -7579,6 +7643,56 @@ func easyjson6601e8cdEncodeGithubComSoniricoGoHyperliquid64(out *jwriter.Writer,
 		const prefix string = ",\"fee\":"
 		out.RawString(prefix)
 		out.String(string(in.Fee))
+	}
+	if in.UsdcValue != "" {
+		const prefix string = ",\"usdcValue\":"
+		out.RawString(prefix)
+		out.String(string(in.UsdcValue))
+	}
+	if in.FeeToken != "" {
+		const prefix string = ",\"feeToken\":"
+		out.RawString(prefix)
+		out.String(string(in.FeeToken))
+	}
+	if in.NativeTokenFee != "" {
+		const prefix string = ",\"nativeTokenFee\":"
+		out.RawString(prefix)
+		out.String(string(in.NativeTokenFee))
+	}
+	if in.Token != "" {
+		const prefix string = ",\"token\":"
+		out.RawString(prefix)
+		out.String(string(in.Token))
+	}
+	if in.Amount != "" {
+		const prefix string = ",\"amount\":"
+		out.RawString(prefix)
+		out.String(string(in.Amount))
+	}
+	if in.SourceDex != "" {
+		const prefix string = ",\"sourceDex\":"
+		out.RawString(prefix)
+		out.String(string(in.SourceDex))
+	}
+	if in.DestinationDex != "" {
+		const prefix string = ",\"destinationDex\":"
+		out.RawString(prefix)
+		out.String(string(in.DestinationDex))
+	}
+	if in.Vault != "" {
+		const prefix string = ",\"vault\":"
+		out.RawString(prefix)
+		out.String(string(in.Vault))
+	}
+	if in.Nonce != nil {
+		const prefix string = ",\"nonce\":"
+		out.RawString(prefix)
+		out.Int64(int64(*in.Nonce))
+	}
+	if in.ToPerp != nil {
+		const prefix string = ",\"toPerp\":"
+		out.RawString(prefix)
+		out.Bool(bool(*in.ToPerp))
 	}
 	out.RawByte('}')
 }

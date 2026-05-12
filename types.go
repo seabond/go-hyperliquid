@@ -432,12 +432,28 @@ type UserNonFundingLedgerUpdates struct {
 	Time  int64       `json:"time"`
 }
 
+// LedgerDelta is the union of every variant HL emits on
+// userNonFundingLedgerUpdates. Each variant only populates a subset;
+// every absent field decodes as its zero value (empty string / nil
+// pointer). usdc is for variants denominated in USDC; usdcValue is
+// the USDC-equivalent reported alongside a token+amount on token
+// transfers (send / spotTransfer).
 type LedgerDelta struct {
-	Type        string `json:"type"`
-	USDC        string `json:"usdc"`
-	User        string `json:"user"`
-	Destination string `json:"destination"`
-	Fee         string `json:"fee"`
+	Type           string `json:"type"`
+	USDC           string `json:"usdc"`
+	UsdcValue      string `json:"usdcValue"`
+	User           string `json:"user"`
+	Destination    string `json:"destination"`
+	Fee            string `json:"fee"`
+	FeeToken       string `json:"feeToken"`
+	NativeTokenFee string `json:"nativeTokenFee"`
+	Token          string `json:"token"`
+	Amount         string `json:"amount"`
+	SourceDex      string `json:"sourceDex"`
+	DestinationDex string `json:"destinationDex"`
+	Vault          string `json:"vault"`
+	Nonce          *int64 `json:"nonce"`
+	ToPerp         *bool  `json:"toPerp"`
 }
 
 type UserFees struct {
