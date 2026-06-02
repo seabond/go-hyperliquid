@@ -3106,6 +3106,12 @@ func easyjson6601e8cdDecodeGithubComSoniricoGoHyperliquid25(in *jlexer.Lexer, ou
 			} else {
 				out.EntryNtl = string(in.String())
 			}
+		case "borrowed":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.Borrowed = string(in.String())
+			}
 		default:
 			in.SkipRecursive()
 		}

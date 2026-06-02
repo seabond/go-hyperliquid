@@ -235,6 +235,12 @@ type SpotBalance struct {
 	Hold     string `json:"hold"`
 	Total    string `json:"total"`
 	EntryNtl string `json:"entryNtl"`
+	// Borrowed is the outstanding borrow on this token under portfolio
+	// margin (USD-denominated string). Present only on portfolioMargin
+	// accounts with an active borrow; absent (empty) otherwise. The custom
+	// easyjson decoder parses this; it is intentionally not emitted by the
+	// generated encoder since we never marshal SpotBalance back out.
+	Borrowed string `json:"borrowed,omitempty"`
 }
 
 type SpotUserState struct {
