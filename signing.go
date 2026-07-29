@@ -702,9 +702,21 @@ func SignUserSignedAction(
 	return account.SignTypedData(ctx, userSignedPayload(action, payloadTypes, primaryType))
 }
 
-// addUserSignedEnvelope adds the two fields every user-signed action carries.
+// AddUserSignedEnvelope adds the two fields every user-signed action carries.
 // signatureChainId is the chain the wallet signs on; hyperliquidChain names the
 // environment and is what stops a testnet signature being replayed on mainnet.
+//
+// Exported because a caller that signs through its own signer has to send the
+// SAME map the signature commits to. Exchange.postAction sends whatever map it
+// was handed, and only SignUserSignedAction added these fields — so a custom
+// signer could produce a correct signature over a body it could not then
+// assemble, which surfaces as a rejected withdrawal rather than as a missing
+// function. It is idempotent, so calling it before handing the action to the SDK
+// is safe.
+func AddUserSignedEnvelope(action map[string]any, isMainnet bool) {
+	addUserSignedEnvelope(action, isMainnet)
+}
+
 func addUserSignedEnvelope(action map[string]any, isMainnet bool) {
 	action["signatureChainId"] = "0x66eee"
 	action["hyperliquidChain"] = "Mainnet"
