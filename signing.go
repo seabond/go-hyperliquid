@@ -947,3 +947,42 @@ func FloatToUsdInt(value float64) int {
 func GetTimestampMs() int64 {
 	return time.Now().UnixMilli()
 }
+
+// ── exported so a remote signer can be shown what it is signing ──
+
+// EncodeAction returns the exact msgpack bytes this SDK hashes and sends.
+//
+// It exists so an action can be handed to a remote signer alongside the request
+// to sign it. Without this the signer receives only a domain separator and a
+// typed-data hash, which makes a limit order and a bridge withdrawal
+// indistinguishable — so "may sign" means "may sign anything", and every risk
+// control has to live in the caller that a compromise would bypass.
+//
+// The bytes must come from HERE rather than from the signer's own encoder. The
+// request body Hyperliquid receives is encoded by this SDK; a signer that
+// re-encoded and got different bytes would produce a signature that does not
+// match the body, and the exchange would reject it. Handing over these exact
+// bytes also means the signer needs no encoder of its own, and no agreement
+// about msgpack's fiddlier corners — insertion-ordered map keys, compact ints,
+// the str16-to-str8 rewrite for Python compatibility.
+func EncodeAction(action any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := msgpack.NewEncoder(&buf)
+	// Must NOT sort map keys: Python preserves insertion order, and Go structs
+	// serialize in declaration order. Sorting here would change the action hash.
+	enc.UseCompactInts(true)
+	if err := enc.Encode(action); err != nil {
+		return nil, fmt.Errorf("encode action: %w", err)
+	}
+	return convertStr16ToStr8(buf.Bytes()), nil
+}
+
+// ActionHash returns keccak256(msgpack(action) || nonce || vault flag [|| expiresAfter]),
+// the value the phantom agent commits to.
+//
+// Exported for the same reason as EncodeAction: a remote signer, or an auditor,
+// can check that a description of an action really produces the hash being
+// signed.
+func ActionHash(action any, vaultAddress string, nonce int64, expiresAfter *int64) []byte {
+	return actionHash(action, vaultAddress, nonce, expiresAfter)
+}
