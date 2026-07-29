@@ -986,3 +986,33 @@ func EncodeAction(action any) ([]byte, error) {
 func ActionHash(action any, vaultAddress string, nonce int64, expiresAfter *int64) []byte {
 	return actionHash(action, vaultAddress, nonce, expiresAfter)
 }
+
+// L1ActionPayload returns the EIP-712 payload this SDK signs for an L1 action.
+//
+// A custom L1ActionSigner receives the raw action and must produce a signature
+// over exactly what the default path would have signed. Without this it would
+// have to rebuild the phantom agent and the Exchange domain by hand, and any
+// divergence produces a signature Hyperliquid rejects — a failure that surfaces
+// as a rejected order rather than as an obvious bug.
+//
+// Pair it with EncodeAction when the signer is remote: EncodeAction gives the
+// bytes the action hashes to, and this gives the payload those bytes commit to.
+func L1ActionPayload(action any, vaultAddress string, nonce int64, expiresAfter *int64, isMainnet bool) apitypes.TypedData {
+	hash := actionHash(action, vaultAddress, nonce, expiresAfter)
+	return l1Payload(constructPhantomAgent(hash, isMainnet), isMainnet)
+}
+
+// L1ActionHashes returns the EIP-712 domain separator and typed-data hash for an
+// L1 action — the two 32-byte values a remote signer is asked to sign over.
+func L1ActionHashes(action any, vaultAddress string, nonce int64, expiresAfter *int64, isMainnet bool) (domainSeparator, typedDataHash []byte, err error) {
+	td := L1ActionPayload(action, vaultAddress, nonce, expiresAfter, isMainnet)
+	domainSeparator, err = td.HashStruct("EIP712Domain", td.Domain.Map())
+	if err != nil {
+		return nil, nil, fmt.Errorf("hash EIP712Domain: %w", err)
+	}
+	typedDataHash, err = td.HashStruct(td.PrimaryType, td.Message)
+	if err != nil {
+		return nil, nil, fmt.Errorf("hash %s: %w", td.PrimaryType, err)
+	}
+	return domainSeparator, typedDataHash, nil
+}
