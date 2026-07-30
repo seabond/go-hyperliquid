@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -311,21 +312,110 @@ func readLen(data []byte, pos, size int) int {
 	}
 }
 
-func actionHash(action any, vaultAddress string, nonce int64, expiresAfter *int64) []byte {
+// maxActionNesting bounds how deep encodeAction will look for maps. An action is
+// a handful of levels deep; anything past this is a cycle, which would otherwise
+// be found by the encoder recursing until the stack runs out.
+const maxActionNesting = 64
+
+// orderableMapTypes are the map types msgpack's SetSortMapKeys actually orders.
+// Every other map type falls back to Go's randomised iteration.
+var orderableMapTypes = map[reflect.Type]bool{
+	reflect.TypeOf(map[string]string{}):      true,
+	reflect.TypeOf(map[string]bool{}):        true,
+	reflect.TypeOf(map[string]interface{}{}): true,
+}
+
+// encodeAction is the one msgpack encoding of an action. Everything that hashes
+// an action and everything that hands the bytes to a remote signer goes through
+// here.
+//
+// It has to be one function and it has to be deterministic. actionHash and
+// EncodeAction used to encode separately, and for a map-typed action that
+// produced DIFFERENT bytes on each call, because Go randomises map iteration
+// order. A remote signer was then shown one encoding while a different one was
+// hashed and sent — the exact confusion exporting the bytes exists to remove.
+func encodeAction(action any) ([]byte, error) {
+	if err := checkOrderableMaps(reflect.ValueOf(action), 0); err != nil {
+		return nil, err
+	}
+
 	var buf bytes.Buffer
 	enc := msgpack.NewEncoder(&buf)
-	// CRITICAL: Do NOT use SetSortMapKeys(true) - Python preserves insertion order
-	// Structs in Go will serialize fields in the order they are defined
+	// Compact ints, plus the str16-to-str8 rewrite below, are what make these
+	// bytes agree with Python's msgpack — which is what Hyperliquid hashes.
 	enc.UseCompactInts(true)
+	// Sorting applies to Go maps only: structs still encode in declaration order,
+	// which is what mirrors an insertion-ordered Python dict. A Go map has no
+	// insertion order to mirror, so some total order must be chosen, and
+	// lexicographic is the one the wire already uses — encoding/json sorts map
+	// keys, so this is the order Hyperliquid re-derives the hash from when it
+	// re-encodes the JSON body it received.
+	enc.SetSortMapKeys(true)
 
-	err := enc.Encode(action)
+	if err := enc.Encode(action); err != nil {
+		return nil, fmt.Errorf("encode action: %w", err)
+	}
+	// Convert str16 to str8 for Python compatibility.
+	return convertStr16ToStr8(buf.Bytes()), nil
+}
+
+// checkOrderableMaps rejects an action holding a map whose keys the encoder
+// cannot put in a fixed order, because such an action has no single hash: two
+// encodes of the same value produce different bytes, so the signature would be
+// over a pre-image nobody — not the exchange, not an auditor — can reproduce.
+// Refusing is the only safe answer.
+func checkOrderableMaps(v reflect.Value, depth int) error {
+	if depth > maxActionNesting {
+		return fmt.Errorf("action nests deeper than %d levels", maxActionNesting)
+	}
+	if !v.IsValid() {
+		return nil
+	}
+	switch v.Kind() {
+	case reflect.Interface, reflect.Pointer:
+		if v.IsNil() {
+			return nil
+		}
+		return checkOrderableMaps(v.Elem(), depth+1)
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < v.Len(); i++ {
+			if err := checkOrderableMaps(v.Index(i), depth+1); err != nil {
+				return err
+			}
+		}
+	case reflect.Struct:
+		t := v.Type()
+		for i := 0; i < v.NumField(); i++ {
+			// Unexported fields are not encoded, so they cannot affect the bytes.
+			if !t.Field(i).IsExported() {
+				continue
+			}
+			if err := checkOrderableMaps(v.Field(i), depth+1); err != nil {
+				return err
+			}
+		}
+	case reflect.Map:
+		if !orderableMapTypes[v.Type()] {
+			return fmt.Errorf(
+				"action contains a %s: msgpack cannot order its keys, so the action hash would differ between encodes",
+				v.Type(),
+			)
+		}
+		iter := v.MapRange()
+		for iter.Next() {
+			if err := checkOrderableMaps(iter.Value(), depth+1); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func actionHash(action any, vaultAddress string, nonce int64, expiresAfter *int64) []byte {
+	data, err := encodeAction(action)
 	if err != nil {
 		panic(fmt.Sprintf("failed to marshal action: %v", err))
 	}
-	data := buf.Bytes()
-
-	// Convert fixstr to str8 for Python compatibility
-	data = convertStr16ToStr8(data)
 
 	// fmt.Printf("🔍 DEBUG actionHash msgpack: %s\n", hex.EncodeToString(data))
 
@@ -602,19 +692,50 @@ func SignUserSignedAction(
 	primaryType string,
 	isMainnet bool,
 ) (*SignatureResult, error) {
-	// Add signatureChainId based on environment
-	// signatureChainId is the chain used by the wallet to sign.
-	// hyperliquidChain determines the environment and prevents replay attacks.
+	// Mutating the caller's map is load-bearing, not a slip: postAction sends this
+	// same map as the request body, and Hyperliquid rejects a body without
+	// signatureChainId and hyperliquidChain.
+	addUserSignedEnvelope(action, isMainnet)
+
+	// signInner uses hashStructLenient which filters message to only include
+	// fields declared in payloadTypes, matching Python eth_account behavior
+	return account.SignTypedData(ctx, userSignedPayload(action, payloadTypes, primaryType))
+}
+
+// AddUserSignedEnvelope adds the two fields every user-signed action carries.
+// signatureChainId is the chain the wallet signs on; hyperliquidChain names the
+// environment and is what stops a testnet signature being replayed on mainnet.
+//
+// Exported because a caller that signs through its own signer has to send the
+// SAME map the signature commits to. Exchange.postAction sends whatever map it
+// was handed, and only SignUserSignedAction added these fields — so a custom
+// signer could produce a correct signature over a body it could not then
+// assemble, which surfaces as a rejected withdrawal rather than as a missing
+// function. It is idempotent, so calling it before handing the action to the SDK
+// is safe.
+func AddUserSignedEnvelope(action map[string]any, isMainnet bool) {
+	addUserSignedEnvelope(action, isMainnet)
+}
+
+func addUserSignedEnvelope(action map[string]any, isMainnet bool) {
 	action["signatureChainId"] = "0x66eee"
 	action["hyperliquidChain"] = "Mainnet"
 	if !isMainnet {
 		action["hyperliquidChain"] = "Testnet"
 	}
+}
 
-	// Create typed data
+// userSignedPayload builds the EIP-712 payload for a user-signed action. It is
+// the single definition of that payload, so the signing path and the exported
+// hashes cannot drift apart.
+func userSignedPayload(
+	action map[string]any,
+	payloadTypes []apitypes.Type,
+	primaryType string,
+) apitypes.TypedData {
 	// Note: chainId is hardcoded to 421614 just like the Python SDK
 	chainId := math.HexOrDecimal256(*big.NewInt(421614))
-	typedData := apitypes.TypedData{
+	return apitypes.TypedData{
 		Domain: apitypes.TypedDataDomain{
 			ChainId:           &chainId,
 			Name:              "HyperliquidSignTransaction",
@@ -633,10 +754,46 @@ func SignUserSignedAction(
 		PrimaryType: primaryType,
 		Message:     action,
 	}
+}
 
-	// signInner uses hashStructLenient which filters message to only include
-	// fields declared in payloadTypes, matching Python eth_account behavior
-	return account.SignTypedData(ctx, typedData)
+// UserSignedActionHashes returns the EIP-712 domain separator and typed-data
+// hash for a user-signed action — the two 32-byte values a remote signer is
+// asked to sign over.
+//
+// The user-signed class is the value-moving one: usdSend, withdraw3, sendAsset,
+// approveAgent. It has no msgpack and no phantom agent, so L1ActionHashes cannot
+// reach it. Without this, a deployment that pushes signing out to a custody
+// service can only describe its trading actions, and the transfers — the ones
+// worth authorizing — would have to be signed blind or have this domain
+// reimplemented from documentation, where being subtly wrong surfaces as a
+// rejected withdrawal rather than as an obvious bug.
+//
+// Unlike SignUserSignedAction this does not modify the caller's map: it is a
+// question about an action, not a step in sending one.
+func UserSignedActionHashes(
+	action map[string]any,
+	payloadTypes []apitypes.Type,
+	primaryType string,
+	isMainnet bool,
+) (domainSeparator, typedDataHash []byte, err error) {
+	withEnvelope := make(map[string]any, len(action)+2)
+	for k, v := range action {
+		withEnvelope[k] = v
+	}
+	addUserSignedEnvelope(withEnvelope, isMainnet)
+
+	td := userSignedPayload(withEnvelope, payloadTypes, primaryType)
+	domainSeparator, err = td.HashStruct("EIP712Domain", td.Domain.Map())
+	if err != nil {
+		return nil, nil, fmt.Errorf("hash EIP712Domain: %w", err)
+	}
+	// hashStructLenient, not HashStruct: the message carries fields payloadTypes
+	// does not declare, and the signing path ignores them the same way.
+	typedDataHash, err = hashStructLenient(td, td.PrimaryType, td.Message)
+	if err != nil {
+		return nil, nil, fmt.Errorf("hash %s: %w", td.PrimaryType, err)
+	}
+	return domainSeparator, typedDataHash, nil
 }
 
 func SignL1Action(
@@ -946,4 +1103,69 @@ func FloatToUsdInt(value float64) int {
 // GetTimestampMs returns current timestamp in milliseconds
 func GetTimestampMs() int64 {
 	return time.Now().UnixMilli()
+}
+
+// ── exported so a remote signer can be shown what it is signing ──
+
+// EncodeAction returns the exact msgpack bytes this SDK hashes and sends.
+//
+// It exists so an action can be handed to a remote signer alongside the request
+// to sign it. Without this the signer receives only a domain separator and a
+// typed-data hash, which makes a limit order and a bridge withdrawal
+// indistinguishable — so "may sign" means "may sign anything", and every risk
+// control has to live in the caller that a compromise would bypass.
+//
+// The bytes must come from HERE rather than from the signer's own encoder. The
+// request body Hyperliquid receives is encoded by this SDK; a signer that
+// re-encoded and got different bytes would produce a signature that does not
+// match the body, and the exchange would reject it. Handing over these exact
+// bytes also means the signer needs no encoder of its own, and no agreement
+// about msgpack's fiddlier corners — declaration-ordered struct fields, compact
+// ints, the str16-to-str8 rewrite for Python compatibility.
+//
+// It shares encodeAction with actionHash rather than re-implementing it. Those
+// two were once separate copies of the same eight lines, and they silently
+// disagreed for map-typed actions; see encodeAction.
+func EncodeAction(action any) ([]byte, error) {
+	return encodeAction(action)
+}
+
+// ActionHash returns keccak256(msgpack(action) || nonce || vault flag [|| expiresAfter]),
+// the value the phantom agent commits to.
+//
+// Exported for the same reason as EncodeAction: a remote signer, or an auditor,
+// can check that a description of an action really produces the hash being
+// signed.
+func ActionHash(action any, vaultAddress string, nonce int64, expiresAfter *int64) []byte {
+	return actionHash(action, vaultAddress, nonce, expiresAfter)
+}
+
+// L1ActionPayload returns the EIP-712 payload this SDK signs for an L1 action.
+//
+// A custom L1ActionSigner receives the raw action and must produce a signature
+// over exactly what the default path would have signed. Without this it would
+// have to rebuild the phantom agent and the Exchange domain by hand, and any
+// divergence produces a signature Hyperliquid rejects — a failure that surfaces
+// as a rejected order rather than as an obvious bug.
+//
+// Pair it with EncodeAction when the signer is remote: EncodeAction gives the
+// bytes the action hashes to, and this gives the payload those bytes commit to.
+func L1ActionPayload(action any, vaultAddress string, nonce int64, expiresAfter *int64, isMainnet bool) apitypes.TypedData {
+	hash := actionHash(action, vaultAddress, nonce, expiresAfter)
+	return l1Payload(constructPhantomAgent(hash, isMainnet), isMainnet)
+}
+
+// L1ActionHashes returns the EIP-712 domain separator and typed-data hash for an
+// L1 action — the two 32-byte values a remote signer is asked to sign over.
+func L1ActionHashes(action any, vaultAddress string, nonce int64, expiresAfter *int64, isMainnet bool) (domainSeparator, typedDataHash []byte, err error) {
+	td := L1ActionPayload(action, vaultAddress, nonce, expiresAfter, isMainnet)
+	domainSeparator, err = td.HashStruct("EIP712Domain", td.Domain.Map())
+	if err != nil {
+		return nil, nil, fmt.Errorf("hash EIP712Domain: %w", err)
+	}
+	typedDataHash, err = td.HashStruct(td.PrimaryType, td.Message)
+	if err != nil {
+		return nil, nil, fmt.Errorf("hash %s: %w", td.PrimaryType, err)
+	}
+	return domainSeparator, typedDataHash, nil
 }

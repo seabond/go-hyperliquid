@@ -3151,6 +3151,11 @@ func easyjson6601e8cdEncodeGithubComSoniricoGoHyperliquid25(out *jwriter.Writer,
 		out.RawString(prefix)
 		out.String(string(in.EntryNtl))
 	}
+	if in.Borrowed != "" {
+		const prefix string = ",\"borrowed\":"
+		out.RawString(prefix)
+		out.String(string(in.Borrowed))
+	}
 	out.RawByte('}')
 }
 
@@ -7529,6 +7534,12 @@ func easyjson6601e8cdDecodeGithubComSoniricoGoHyperliquid64(in *jlexer.Lexer, ou
 			} else {
 				out.USDC = string(in.String())
 			}
+		case "usdcValue":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.UsdcValue = string(in.String())
+			}
 		case "user":
 			if in.IsNull() {
 				in.Skip()
@@ -7546,12 +7557,6 @@ func easyjson6601e8cdDecodeGithubComSoniricoGoHyperliquid64(in *jlexer.Lexer, ou
 				in.Skip()
 			} else {
 				out.Fee = string(in.String())
-			}
-		case "usdcValue":
-			if in.IsNull() {
-				in.Skip()
-			} else {
-				out.UsdcValue = string(in.String())
 			}
 		case "feeToken":
 			if in.IsNull() {
@@ -7600,16 +7605,28 @@ func easyjson6601e8cdDecodeGithubComSoniricoGoHyperliquid64(in *jlexer.Lexer, ou
 				in.Skip()
 				out.Nonce = nil
 			} else {
-				v := int64(in.Int64())
-				out.Nonce = &v
+				if out.Nonce == nil {
+					out.Nonce = new(int64)
+				}
+				if in.IsNull() {
+					in.Skip()
+				} else {
+					*out.Nonce = int64(in.Int64())
+				}
 			}
 		case "toPerp":
 			if in.IsNull() {
 				in.Skip()
 				out.ToPerp = nil
 			} else {
-				v := bool(in.Bool())
-				out.ToPerp = &v
+				if out.ToPerp == nil {
+					out.ToPerp = new(bool)
+				}
+				if in.IsNull() {
+					in.Skip()
+				} else {
+					*out.ToPerp = bool(in.Bool())
+				}
 			}
 		default:
 			in.SkipRecursive()
@@ -7636,6 +7653,11 @@ func easyjson6601e8cdEncodeGithubComSoniricoGoHyperliquid64(out *jwriter.Writer,
 		out.String(string(in.USDC))
 	}
 	{
+		const prefix string = ",\"usdcValue\":"
+		out.RawString(prefix)
+		out.String(string(in.UsdcValue))
+	}
+	{
 		const prefix string = ",\"user\":"
 		out.RawString(prefix)
 		out.String(string(in.User))
@@ -7650,55 +7672,58 @@ func easyjson6601e8cdEncodeGithubComSoniricoGoHyperliquid64(out *jwriter.Writer,
 		out.RawString(prefix)
 		out.String(string(in.Fee))
 	}
-	if in.UsdcValue != "" {
-		const prefix string = ",\"usdcValue\":"
-		out.RawString(prefix)
-		out.String(string(in.UsdcValue))
-	}
-	if in.FeeToken != "" {
+	{
 		const prefix string = ",\"feeToken\":"
 		out.RawString(prefix)
 		out.String(string(in.FeeToken))
 	}
-	if in.NativeTokenFee != "" {
+	{
 		const prefix string = ",\"nativeTokenFee\":"
 		out.RawString(prefix)
 		out.String(string(in.NativeTokenFee))
 	}
-	if in.Token != "" {
+	{
 		const prefix string = ",\"token\":"
 		out.RawString(prefix)
 		out.String(string(in.Token))
 	}
-	if in.Amount != "" {
+	{
 		const prefix string = ",\"amount\":"
 		out.RawString(prefix)
 		out.String(string(in.Amount))
 	}
-	if in.SourceDex != "" {
+	{
 		const prefix string = ",\"sourceDex\":"
 		out.RawString(prefix)
 		out.String(string(in.SourceDex))
 	}
-	if in.DestinationDex != "" {
+	{
 		const prefix string = ",\"destinationDex\":"
 		out.RawString(prefix)
 		out.String(string(in.DestinationDex))
 	}
-	if in.Vault != "" {
+	{
 		const prefix string = ",\"vault\":"
 		out.RawString(prefix)
 		out.String(string(in.Vault))
 	}
-	if in.Nonce != nil {
+	{
 		const prefix string = ",\"nonce\":"
 		out.RawString(prefix)
-		out.Int64(int64(*in.Nonce))
+		if in.Nonce == nil {
+			out.RawString("null")
+		} else {
+			out.Int64(int64(*in.Nonce))
+		}
 	}
-	if in.ToPerp != nil {
+	{
 		const prefix string = ",\"toPerp\":"
 		out.RawString(prefix)
-		out.Bool(bool(*in.ToPerp))
+		if in.ToPerp == nil {
+			out.RawString("null")
+		} else {
+			out.Bool(bool(*in.ToPerp))
+		}
 	}
 	out.RawByte('}')
 }
