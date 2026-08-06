@@ -201,6 +201,25 @@ type (
 		User string `json:"user"`
 	}
 
+	// WsBasicOrder is one order on the openOrders / orderUpdates channels.
+	//
+	// The fields below Cloid are the "frontend" set. They are NOT part of the
+	// REST `openOrders` response, only of `frontendOpenOrders` — but the
+	// openOrders WEBSOCKET channel sends them anyway. Verified against mainnet
+	// 2026-08-06: subscribing openOrders for 0x9bbc…9b7a returned
+	//
+	//	{"coin":"HYPE","side":"A","limitPx":"65.32","sz":"0.0","oid":501149851930,
+	//	 "timestamp":…,"triggerCondition":"Price above 71","isTrigger":true,
+	//	 "triggerPx":"71.0","children":[],"isPositionTpsl":true,"reduceOnly":true,
+	//	 "orderType":"Take Profit Market","origSz":"0.0","tif":null,"cloid":null}
+	//
+	// while the REST `openOrders` request for the same account answered with
+	// only the eight fields above. They were previously dropped on the floor by
+	// the decoder, which made a resting stop indistinguishable from a resting
+	// entry order for any consumer of this channel.
+	//
+	// Tif is a pointer because HL sends `"tif":null` for trigger orders, and
+	// "no tif" is meaningfully different from "empty tif".
 	WsBasicOrder struct {
 		Coin      string  `json:"coin"`
 		Side      string  `json:"side"`
@@ -210,6 +229,13 @@ type (
 		Timestamp int64   `json:"timestamp"`
 		OrigSz    string  `json:"origSz"`
 		Cloid     *string `json:"cloid"`
+
+		ReduceOnly     bool    `json:"reduceOnly"`
+		IsTrigger      bool    `json:"isTrigger"`
+		IsPositionTpsl bool    `json:"isPositionTpsl"`
+		OrderType      string  `json:"orderType"`
+		TriggerPx      string  `json:"triggerPx"`
+		Tif            *string `json:"tif"`
 	}
 
 	WsOrderFills struct {

@@ -1143,6 +1143,50 @@ func easyjson8df87204DecodeGithubComSoniricoGoHyperliquid10(in *jlexer.Lexer, ou
 					*out.Cloid = string(in.String())
 				}
 			}
+		case "reduceOnly":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.ReduceOnly = bool(in.Bool())
+			}
+		case "isTrigger":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.IsTrigger = bool(in.Bool())
+			}
+		case "isPositionTpsl":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.IsPositionTpsl = bool(in.Bool())
+			}
+		case "orderType":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.OrderType = string(in.String())
+			}
+		case "triggerPx":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				out.TriggerPx = string(in.String())
+			}
+		case "tif":
+			if in.IsNull() {
+				in.Skip()
+				out.Tif = nil
+			} else {
+				if out.Tif == nil {
+					out.Tif = new(string)
+				}
+				if in.IsNull() {
+					in.Skip()
+				} else {
+					*out.Tif = string(in.String())
+				}
+			}
 		default:
 			in.SkipRecursive()
 		}
@@ -1199,6 +1243,40 @@ func easyjson8df87204EncodeGithubComSoniricoGoHyperliquid10(out *jwriter.Writer,
 			out.RawString("null")
 		} else {
 			out.String(string(*in.Cloid))
+		}
+	}
+	{
+		const prefix string = ",\"reduceOnly\":"
+		out.RawString(prefix)
+		out.Bool(bool(in.ReduceOnly))
+	}
+	{
+		const prefix string = ",\"isTrigger\":"
+		out.RawString(prefix)
+		out.Bool(bool(in.IsTrigger))
+	}
+	{
+		const prefix string = ",\"isPositionTpsl\":"
+		out.RawString(prefix)
+		out.Bool(bool(in.IsPositionTpsl))
+	}
+	{
+		const prefix string = ",\"orderType\":"
+		out.RawString(prefix)
+		out.String(string(in.OrderType))
+	}
+	{
+		const prefix string = ",\"triggerPx\":"
+		out.RawString(prefix)
+		out.String(string(in.TriggerPx))
+	}
+	{
+		const prefix string = ",\"tif\":"
+		out.RawString(prefix)
+		if in.Tif == nil {
+			out.RawString("null")
+		} else {
+			out.String(string(*in.Tif))
 		}
 	}
 	out.RawByte('}')
