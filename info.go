@@ -788,6 +788,28 @@ func (i *Info) UserFees(ctx context.Context, address string) (*UserFees, error) 
 	return &result, nil
 }
 
+// UserRateLimit retrieves an address's L1 action allowance and how much of it
+// has been spent. An address that has never traded answers with cap 10000 and
+// used 0, not an error.
+//
+// A null body has been observed and decodes to a zero-valued struct, so
+// NRequestsCap == 0 means UNKNOWN, never "no allowance".
+func (i *Info) UserRateLimit(ctx context.Context, address string) (*UserRateLimit, error) {
+	resp, err := i.client.post(ctx, "/info", map[string]any{
+		"type": "userRateLimit",
+		"user": address,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch user rate limit: %w", err)
+	}
+
+	var result UserRateLimit
+	if err := jUnmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal user rate limit: %w", err)
+	}
+	return &result, nil
+}
+
 func (i *Info) UserActiveAssetData(
 	ctx context.Context,
 	address string,
