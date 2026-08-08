@@ -462,6 +462,17 @@ type LedgerDelta struct {
 	ToPerp         *bool  `json:"toPerp"`
 }
 
+// UserRateLimit is an address's L1 action allowance. HL grants 10000 requests
+// plus one per USDC of cumulative volume traded, counts a batch of n actions as
+// n, and throttles an address past its cap to roughly one action per ten
+// seconds. Cancels get a higher ceiling of min(cap+100000, cap*2).
+type UserRateLimit struct {
+	CumVlm           string `json:"cumVlm"`
+	NRequestsUsed    int64  `json:"nRequestsUsed"`
+	NRequestsCap     int64  `json:"nRequestsCap"`
+	NRequestsSurplus int64  `json:"nRequestsSurplus"`
+}
+
 type UserFees struct {
 	ActiveReferralDiscount string       `json:"activeReferralDiscount"`
 	DailyUserVolume        []UserVolume `json:"dailyUserVlm"`
